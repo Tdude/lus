@@ -157,11 +157,12 @@ AJAX endpoints follow the pattern:
 ## Future
 
 - Trying to use an open architecture so the public part can be code agnostic. Wordpress being a very popular platform, let's start here. This is getting to be a comprehensive plugin you can make a business with. However, there is so much more in terms of contacts within your country's education system to handle, to reach proper traction. I am hoping this can be a jump start for any company or school system who want to tackle (some) modern kids' challenges in learning how to read and comprehend text.
-  > If we "save" one in a million, there is still million$ to be saved!
+
+> If we "save" one in a million, there are still million$ to be saved!
 
 ## Reference
 
-Old implementation files are maintained in a private repo for documentation purposes and possible safety issues. I figure the current repo should be mostly AI so not "my" code per sé.
+Old working plugin implementation files are maintained in a private repo for documentation purposes and possible safety issues since I am not maintaining them. You should not play with possible Tb's of recordable sound files publicly. I figure the current repo should be mostly AI so not "my" code per sé. I'm merely the puzzle facilitator.
 
 ## Testing
 
