@@ -1,3 +1,8 @@
+# Ignore Steve Jobs ghost
+.DS_Store
+# Ignore my old plugin
+/reference/
+
 # Wordpress - ignore core, configuration, examples, uploads and logs.
 # https://github.com/github/gitignore/blob/main/WordPress.gitignore
 

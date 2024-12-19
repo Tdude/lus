@@ -8,9 +8,9 @@ A WordPress plugin for recording and evaluating reading comprehension, being ref
 
 ### Frontend Structure
 
-- Standardized HTML using data attributes (`data-ra-*`)
+- Standardized HTML using data attributes (`data-lus-*`)
 - Modular JavaScript architecture
-- Consistent UI components
+- Consistent UI components throughout the admin and public part
 - Event-driven interactions
 
 ### Backend Structure
@@ -85,15 +85,15 @@ Each content type follows this implementation sequence:
 reading-assessment/
 ├── admin/
 │   ├── js/
-│   │   ├── ra-core.js
-│   │   ├── ra-handlers.js
-│   │   └── ra-ui.js
+│   │   ├── lus-core.js
+│   │   ├── lus-handlers.js
+│   │   └── lus-ui.js
 │   ├── css/
-│   │   └── ra-admin.css
+│   │   └── lus-admin.css
 │   └── class/
-│       ├── RA_Base_Handler.php
-│       ├── RA_Content_Handler.php
-│       └── RA_Response_Formatter.php
+│       ├── lus-base-handler.php
+│       ├── lus-content-handler.php
+│       └── lus-response-formatter.php
 ├── includes/
 │   └── [core plugin files]
 └── public/
@@ -106,11 +106,11 @@ reading-assessment/
 
 Standard data attributes used throughout the plugin:
 
-- `data-ra-action`: Action type (e.g., "edit", "delete")
-- `data-ra-type`: Content type (e.g., "passage", "question")
-- `data-ra-id`: Item identifier
-- `data-ra-form`: Form identifier
-- `data-ra-modal`: Modal identifier
+- `data-lus-action`: Action type (e.g., "edit", "delete")
+- `data-lus-type`: Content type (e.g., "passage", "question")
+- `data-lus-id`: Item identifier
+- `data-lus-form`: Form identifier
+- `data-lus-modal`: Modal identifier
 
 ### JavaScript Events
 
@@ -125,8 +125,8 @@ Standard events emitted by the system:
 
 AJAX endpoints follow the pattern:
 
-- `ra_admin_{type}_{action}`
-  Example: `ra_admin_passage_save`
+- `lus_admin_{type}_{action}`
+  Example: `lus_admin_passage_save`
 
 ## Progress Log
 
