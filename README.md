@@ -84,22 +84,40 @@ Each content type follows this implementation sequence:
 ## File Structure
 
 ```
-reading-assessment/
-├── admin/
-│   ├── js/
-│   │   ├── lus-core.js
-│   │   ├── lus-handlers.js
-│   │   └── lus-ui.js
-│   ├── css/
-│   │   └── lus-admin.css
-│   └── class/
-│       ├── lus-base-handler.php
-│       ├── lus-content-handler.php
-│       └── lus-response-formatter.php
-├── includes/
-│   └── [core plugin files]
-└── public/
-    └── [public-facing files]
+├── README.md
+├── admin
+│   ├── class-lus-admin.php
+│   ├── css
+│   │   └── lus-admin.css
+│   ├── js
+│   │   ├── lus-core.js
+│   │   ├── lus-handlers.js
+│   │   └── lus-ui.js
+│   └── partials
+│       ├── lus-assignments.php
+│       ├── lus-dashboard.php
+│       ├── lus-passages.php
+│       ├── lus-questions.php
+│       ├── lus-recordings.php
+│       └── lus-results.php
+├── includes
+│   ├── class-lus-activator.php
+│   ├── class-lus-assessment-handler.php
+│   ├── class-lus-database.php
+│   ├── class-lus-deactivator.php
+│   ├── class-lus-evaluator.php
+│   ├── class-lus-i18n.php
+│   ├── class-lus-loader.php
+│   ├── class-lus-recorder.php
+│   └── class-lus.php
+├── languages
+│   ├── lus-sv_SE.po
+│   └── lus.pot
+├── lus.php
+├── public
+│   ├── class-lus-public.php
+│   ├── css
+│   └── js
 ```
 
 ## Technical Documentation
