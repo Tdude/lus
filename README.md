@@ -1,4 +1,4 @@
-# Reading Assessment Plugin Refactoring
+# Lus, a reading assessment plugin refactoring project, soon including AI assessments of recorded text passages
 
 ## Project Overview
 
@@ -84,12 +84,19 @@ Each content type follows this implementation sequence:
 ## File Structure
 
 ```
+├── NFO.md
 ├── README.md
 ├── admin
 │   ├── class-lus-admin.php
 │   ├── css
 │   │   └── lus-admin.css
 │   ├── js
+│   │   ├── handlers
+│   │   │   ├── lus-chart-handler.js
+│   │   │   ├── lus-passages-handler.js
+│   │   │   ├── lus-questions-handler.js
+│   │   │   ├── lus-recordings-handler.js
+│   │   │   └── lus-results-handler.js
 │   │   ├── lus-core.js
 │   │   ├── lus-handlers.js
 │   │   └── lus-ui.js
@@ -99,17 +106,49 @@ Each content type follows this implementation sequence:
 │       ├── lus-passages.php
 │       ├── lus-questions.php
 │       ├── lus-recordings.php
-│       └── lus-results.php
+│       ├── lus-results.php
+│       └── widgets
+│           ├── lus-admin-activity.php
+│           ├── lus-assessment-modal.php
+│           ├── lus-login-message.php
+│           ├── lus-pagination.php
+│           ├── lus-recent-recordings.php
+│           └── lus-statistics.php
+├── changelog.txt
+├── check.php
 ├── includes
 │   ├── class-lus-activator.php
 │   ├── class-lus-assessment-handler.php
+│   ├── class-lus-container.php
 │   ├── class-lus-database.php
+│   ├── class-lus-database0.php
 │   ├── class-lus-deactivator.php
 │   ├── class-lus-evaluator.php
+│   ├── class-lus-events.php
+│   ├── class-lus-export-handler.php
+│   ├── class-lus-feature-flags.php
 │   ├── class-lus-i18n.php
 │   ├── class-lus-loader.php
 │   ├── class-lus-recorder.php
-│   └── class-lus.php
+│   ├── class-lus-statistics.php
+│   ├── class-lus.php
+│   ├── config
+│   │   ├── admin-strings.php
+│   │   └── class-lus-constants.php
+│   ├── dto
+│   │   ├── class-lus-passage-dto.php
+│   │   └── class-lus-recording-dto.php
+│   ├── factory
+│   │   └── class-lus-handler-factory.php
+│   ├── lus-login-message.php
+│   ├── strategy
+│   │   ├── class-lus-levenshtein-strategy.php
+│   │   └── interface-lus-evaluation-strategy.php
+│   └── value-objects
+│       ├── class-lus-difficulty-level.php
+│       ├── class-lus-duration.php
+│       ├── class-lus-score.php
+│       └── class-lus-status.php
 ├── languages
 │   ├── lus-sv_SE.po
 │   └── lus.pot
@@ -117,7 +156,12 @@ Each content type follows this implementation sequence:
 ├── public
 │   ├── class-lus-public.php
 │   ├── css
-│   └── js
+│   │   └── lus-public.css
+│   ├── js
+│   │   └── lus-public.js
+│   └── uninstall.php
+└── uninstall.php
+
 ```
 
 ## Technical Documentation

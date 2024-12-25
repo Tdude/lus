@@ -11,7 +11,7 @@
 
 class LUS {
     /**
-     * The loader that's responsible for maintaining and registering all hooks.
+     * Maintains and registers all hooks for the plugin.
      * @var LUS_Loader
      */
     protected $loader;
@@ -39,7 +39,7 @@ class LUS {
      */
     public function __construct() {
         $this->plugin_name = 'lus';
-        $this->version = LUS_VERSION;
+        $this->version = VERSION;
 
         $this->load_dependencies();
         $this->set_locale();
@@ -53,17 +53,19 @@ class LUS {
      */
     private function load_dependencies() {
         // Core plugin dependencies
-        require_once LUS_PLUGIN_DIR . 'includes/class-lus-loader.php';
-        require_once LUS_PLUGIN_DIR . 'includes/class-lus-i18n.php';
-        require_once LUS_PLUGIN_DIR . 'includes/class-lus-database.php';
+        require_once PLUGIN_DIR . 'includes/class-lus-loader.php';
+        require_once PLUGIN_DIR . 'includes/class-lus-i18n.php';
+        require_once PLUGIN_DIR . 'includes/class-lus-database.php';
 
         // Feature-specific classes
-        require_once LUS_PLUGIN_DIR . 'includes/class-lus-recorder.php';
-        require_once LUS_PLUGIN_DIR . 'includes/class-lus-evaluator.php';
+        require_once PLUGIN_DIR . 'includes/class-lus-recorder.php';
+        require_once PLUGIN_DIR . 'includes/class-lus-evaluator.php';
+        require_once PLUGIN_DIR . 'includes/class-lus-statistics.php';
+        require_once PLUGIN_DIR . 'includes/class-lus-assessment-handler.php';
 
         // Admin and public interfaces
-        require_once LUS_PLUGIN_DIR . 'admin/class-lus-admin.php';
-        require_once LUS_PLUGIN_DIR . 'public/class-lus-public.php';
+        require_once PLUGIN_DIR . 'admin/class-lus-admin.php';
+        require_once PLUGIN_DIR . 'public/class-lus-public.php';
 
         // Initialize main components
         $this->loader = new LUS_Loader();
@@ -79,7 +81,7 @@ class LUS {
     }
 
     /**
-     * Register all of the hooks related to the admin area.
+     * Register admin hooks
      */
     private function define_admin_hooks() {
         $plugin_admin = new LUS_Admin($this->get_plugin_name(), $this->get_version(), $this->db);
@@ -92,12 +94,32 @@ class LUS {
         $this->loader->add_action('admin_menu', $plugin_admin, 'add_menu_pages');
         $this->loader->add_action('admin_init', $plugin_admin, 'register_settings');
 
-        // Plugin list page
-        $this->loader->add_filter('plugin_action_links_' . LUS_PLUGIN_NAME, $plugin_admin, 'add_settings_link');
+        // AJAX handlers
+        $ajax_actions = [
+            'get_passage',
+            'get_passages',
+            'delete_passage',
+            'get_questions',
+            'delete_question',
+            'get_results',
+            'delete_assignment',
+            'save_assessment',
+            'delete_recording',
+            'save_interactions',
+            'bulk_assign_recordings'
+        ];
+
+        foreach ($ajax_actions as $action) {
+            $this->loader->add_action(
+                'wp_ajax_lus_admin_' . $action,
+                $plugin_admin,
+                'ajax_' . $action
+            );
+        }
     }
 
     /**
-     * Register all of the hooks related to the public-facing functionality.
+     * Register public-facing hooks
      */
     private function define_public_hooks() {
         $plugin_public = new LUS_Public($this->get_plugin_name(), $this->get_version(), $this->db);
@@ -106,10 +128,36 @@ class LUS {
         $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_styles');
         $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_scripts');
 
-        // Register shortcodes
+        // Shortcodes and content handling
         $this->loader->add_action('init', $plugin_public, 'register_shortcodes');
 
-        // User redirects and messages
+        // Public AJAX handlers
+        $public_ajax_actions = [
+            'get_questions',
+            'save_recording',
+            'submit_answers',
+            'get_assessment'
+        ];
+
+        foreach ($public_ajax_actions as $action) {
+            // For logged-in users
+            $this->loader->add_action(
+                'wp_ajax_lus_' . $action,
+                $plugin_public,
+                'ajax_' . $action
+            );
+
+            // For non-logged-in users (if needed)
+            if (in_array($action, ['get_questions'])) {
+                $this->loader->add_action(
+                    'wp_ajax_nopriv_lus_' . $action,
+                    $plugin_public,
+                    'ajax_' . $action
+                );
+            }
+        }
+
+        // User handling
         $this->loader->add_filter('login_redirect', $plugin_public, 'subscriber_login_redirect', 10, 3);
         $this->loader->add_action('wp_footer', $plugin_public, 'show_login_message');
     }

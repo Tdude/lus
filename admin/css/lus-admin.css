@@ -1,0 +1,79 @@
+/* lus-admin.css */
+.lus-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top: 2px solid #646970;
+  border-radius: 50%;
+  animation: lus-spin 1s linear infinite;
+  vertical-align: middle;
+  margin: -2px 5px;
+}
+
+@keyframes lus-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.is-loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.is-success {
+  color: #00a32a;
+}
+
+.is-error {
+  color: #d63638;
+}
+
+.lus-success-icon,
+.lus-error-icon {
+  display: inline-block;
+  margin-right: 5px;
+  font-weight: bold;
+}
+
+/* Button states */
+.button.is-loading {
+  padding-left: 30px;
+  position: relative;
+}
+
+.button.is-loading .lus-spinner {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+}
+
+.lus-charts-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.lus-chart-container {
+  background: white;
+  padding: 1rem;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  height: 300px;
+  position: relative;
+}
+
+/* Print styles */
+@media print {
+  .lus-charts-section {
+    break-inside: avoid;
+  }
+}

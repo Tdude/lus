@@ -1,114 +1,275 @@
 <?php
-/** class-lus-database.php
- * Handles all database operations for the plugin.
+/** File: class-lus-database.php
+ * Database Handler Class
+ *
+ * Handles all database operations for the plugin with error handling,
+ * caching, and prepared statements.
  *
  * @package    LUS
  * @subpackage LUS/includes
  */
+
 class LUS_Database {
     /** @var wpdb WordPress database instance */
     private $db;
 
-    /** @var string Upload directory path */
-    private $upload_dir;
-
-    /** @var array Cache for frequent queries */
+    /** @var array Cache storage */
     private $cache = [];
 
+    /** @var array SQL query templates */
+    private const SQL = [
+        // Passages
+        'get_passage' => "
+            SELECT *
+            FROM {prefix}passages
+            WHERE id = %d
+            AND deleted_at IS NULL",
+
+        'get_all_passages' => "
+            SELECT *
+            FROM {prefix}passages
+            WHERE deleted_at IS NULL
+            ORDER BY %s %s
+            LIMIT %d OFFSET %d",
+
+        'create_passage' => "
+            INSERT INTO {prefix}passages
+            (title, content, time_limit, difficulty_level, created_by, created_at)
+            VALUES (%s, %s, %d, %d, %d, %s)",
+
+        'update_passage' => "
+            UPDATE {prefix}passages
+            SET title = %s,
+                content = %s,
+                time_limit = %d,
+                difficulty_level = %d,
+                updated_at = %s
+            WHERE id = %d",
+
+        'soft_delete_passage' => "
+            UPDATE {prefix}passages
+            SET deleted_at = %s
+            WHERE id = %d",
+
+        // Recordings
+        'get_recording' => "
+            SELECT r.*, u.display_name, u.user_email,
+                   p.title as passage_title, p.difficulty_level
+            FROM {prefix}recordings r
+            JOIN {wp_prefix}users u ON r.user_id = u.ID
+            LEFT JOIN {prefix}passages p ON r.passage_id = p.id
+            WHERE r.id = %d",
+
+        'get_recordings' => "
+            SELECT r.*, u.display_name, p.title as passage_title
+            FROM {prefix}recordings r
+            JOIN {wp_prefix}users u ON r.user_id = u.ID
+            LEFT JOIN {prefix}passages p ON r.passage_id = p.id
+            WHERE 1=1
+            {where}
+            ORDER BY r.{orderby} {order}
+            LIMIT %d OFFSET %d",
+
+        'create_recording' => "
+            INSERT INTO {prefix}recordings
+            (user_id, passage_id, audio_file_path, duration, status, created_at)
+            VALUES (%d, %d, %s, %d, %s, %s)",
+
+        'update_recording' => "
+            UPDATE {prefix}recordings
+            SET passage_id = %d,
+                status = %s,
+                updated_at = %s
+            WHERE id = %d",
+
+        // Questions
+        'get_question' => "
+            SELECT q.*, p.title as passage_title
+            FROM {prefix}questions q
+            JOIN {prefix}passages p ON q.passage_id = p.id
+            WHERE q.id = %d
+            AND q.active = 1",
+
+        'get_passage_questions' => "
+            SELECT q.*
+            FROM {prefix}questions q
+            WHERE q.passage_id = %d
+            AND q.active = 1
+            ORDER BY q.id ASC",
+
+        // Responses
+        'get_recording_responses' => "
+            SELECT r.*, q.question_text, q.correct_answer, q.weight
+            FROM {prefix}responses r
+            JOIN {prefix}questions q ON r.question_id = q.id
+            WHERE r.recording_id = %d
+            ORDER BY q.id ASC",
+
+        // Assessments
+        'get_assessment' => "
+            SELECT a.*, r.passage_id, u.display_name as assessor_name,
+                   p.title as passage_title
+            FROM {prefix}assessments a
+            JOIN {prefix}recordings r ON a.recording_id = r.id
+            JOIN {wp_prefix}users u ON a.assessed_by = u.ID
+            JOIN {prefix}passages p ON r.passage_id = p.id
+            WHERE a.id = %d",
+
+        // Statistics
+        'get_passage_stats' => "
+            SELECT COUNT(r.id) as recording_count,
+                   AVG(a.normalized_score) as avg_score,
+                   AVG(r.duration) as avg_duration,
+                   COUNT(DISTINCT r.user_id) as unique_users
+            FROM {prefix}passages p
+            LEFT JOIN {prefix}recordings r ON p.id = r.passage_id
+            LEFT JOIN {prefix}assessments a ON r.id = a.recording_id
+            WHERE p.id = %d
+            {date_filter}"
+    ];
+
     /**
-     * Initialize the class and set its properties.
+     * Constructor
      */
     public function __construct() {
         global $wpdb;
         $this->db = $wpdb;
-        $this->upload_dir = wp_upload_dir()['basedir'] . '/lus';
-    }
-
-    /**
-     * Get upload path for the plugin
-     * @return string Full path to upload directory
-     */
-    private function get_upload_path() {
-        return $this->upload_dir;
-    }
-
-    /**
-     * Get recording path for a specific user
-     * @param int $user_id User ID
-     * @return string Path to user's recording directory
-     */
-    private function get_recording_path($user_id) {
-        return $this->get_upload_path() . '/' . date('Y/m') . '/' . $user_id;
     }
 
     /**
      * Begin a database transaction
      */
-    public function begin_transaction() {
+    public function begin_transaction(): void {
         $this->db->query('START TRANSACTION');
     }
 
     /**
      * Commit a database transaction
      */
-    public function commit() {
+    public function commit(): void {
         $this->db->query('COMMIT');
     }
 
     /**
      * Rollback a database transaction
      */
-    public function rollback() {
+    public function rollback(): void {
         $this->db->query('ROLLBACK');
     }
 
     /**
-     * Clear cache for specific key or all cache
-     * @param string|null $key Specific cache key to clear
+     * Execute a transaction with callback
+     *
+     * @param callable $callback Transaction callback
+     * @return mixed Result of callback
+     * @throws Exception
      */
-    public function clear_cache($key = null) {
-        if ($key === null) {
-            $this->cache = [];
-        } else {
-            unset($this->cache[$key]);
+    public function transaction(callable $callback) {
+        $this->begin_transaction();
+
+        try {
+            $result = $callback();
+            $this->commit();
+            return $result;
+        } catch (Exception $e) {
+            $this->rollback();
+            throw $e;
         }
     }
 
     /**
-     * Create a new passage
+     * Prepare SQL query with proper table prefixes
      *
-     * @param array $data Passage data
-     * @return int|WP_Error New passage ID or error
+     * @param string $query SQL query template
+     * @param array  $args  Query arguments
+     * @return string Prepared query
      */
-    public function create_passage($data) {
-        try {
-            if (empty($data['title']) || empty($data['content'])) {
-                return new WP_Error('missing_fields', __('Title and content are required.', 'lus'));
-            }
+    private function prepare_query(string $query, array $args = []): string {
+        // Replace table prefixes
+        $query = str_replace(
+            ['{prefix}', '{wp_prefix}'],
+            [$this->db->prefix . 'lus_', $this->db->prefix],
+            $query
+        );
 
-            $insert_data = [
-                'title' => $data['title'],
-                'content' => $data['content'],
-                'time_limit' => isset($data['time_limit']) ? absint($data['time_limit']) : 180,
-                'difficulty_level' => isset($data['difficulty_level']) ? absint($data['difficulty_level']) : 1,
-                'created_by' => get_current_user_id(),
-                'created_at' => current_time('mysql')
-            ];
+        // Prepare with arguments if provided
+        if (!empty($args)) {
+            return $this->db->prepare($query, $args);
+        }
 
-            $result = $this->db->insert(
-                $this->db->prefix . 'lus_passages',
-                $insert_data,
-                ['%s', '%s', '%d', '%d', '%d', '%s']
-            );
+        return $query;
+    }
 
-            if ($result === false) {
-                return new WP_Error('db_error', $this->db->last_error);
-            }
+    /**
+     * Get item from cache or execute callback
+     *
+     * @param string   $key      Cache key
+     * @param callable $callback Callback to execute if not cached
+     * @param int      $expires  Cache expiration in seconds
+     * @return mixed Cached or fresh data
+     */
+    private function cache_get(string $key, callable $callback, int $expires = 300) {
+        // Check runtime cache
+        if (isset($this->cache[$key])) {
+            return $this->cache[$key];
+        }
 
-            $this->clear_cache('passages');
-            return $this->db->insert_id;
-        } catch (Exception $e) {
-            return new WP_Error('exception', $e->getMessage());
+        // Check WordPress transient
+        $cached = get_transient("lus_$key");
+        if ($cached !== false) {
+            $this->cache[$key] = $cached;
+            return $cached;
+        }
+
+        // Execute callback and cache result
+        $data = $callback();
+        $this->cache[$key] = $data;
+        set_transient("lus_$key", $data, $expires);
+
+        return $data;
+    }
+
+    /**
+     * Clear cache for specific key or all cache
+     *
+     * @param string|null $key Specific cache key to clear
+     */
+    public function clear_cache(?string $key = null): void {
+        if ($key === null) {
+            // Clear all cache
+            $this->cache = [];
+            $this->delete_transients();
+        } else {
+            // Clear specific key
+            unset($this->cache[$key]);
+            delete_transient("lus_$key");
+        }
+    }
+
+    /**
+     * Delete all plugin transients
+     */
+    private function delete_transients(): void {
+        $this->db->query("
+            DELETE FROM {$this->db->options}
+            WHERE option_name LIKE '%_transient_lus_%'
+            OR option_name LIKE '%_transient_timeout_lus_%'
+        ");
+    }
+
+    /**
+     * Handle database errors
+     *
+     * @param string $operation Operation being performed
+     * @throws Exception
+     */
+    private function handle_error(string $operation): void {
+        if ($this->db->last_error) {
+            throw new Exception(sprintf(
+                __('Database error during %1$s: %2$s', 'lus'),
+                $operation,
+                $this->db->last_error
+            ));
         }
     }
 
@@ -117,25 +278,20 @@ class LUS_Database {
      *
      * @param int $passage_id Passage ID
      * @return object|null Passage object or null if not found
+     * @throws Exception
      */
-    public function get_passage($passage_id) {
-        $cache_key = "passage_{$passage_id}";
+    public function get_passage(int $passage_id): ?object {
+        return $this->cache_get("passage_$passage_id", function() use ($passage_id) {
+            $query = $this->prepare_query(
+                self::SQL['get_passage'],
+                [$passage_id]
+            );
 
-        if (isset($this->cache[$cache_key])) {
-            return $this->cache[$cache_key];
-        }
+            $result = $this->db->get_row($query);
+            $this->handle_error('get_passage');
 
-        $passage = $this->db->get_row($this->db->prepare(
-            "SELECT * FROM {$this->db->prefix}lus_passages
-             WHERE id = %d AND deleted_at IS NULL",
-            $passage_id
-        ));
-
-        if ($passage) {
-            $this->cache[$cache_key] = $passage;
-        }
-
-        return $passage;
+            return $result;
+        });
     }
 
     /**
@@ -143,267 +299,236 @@ class LUS_Database {
      *
      * @param array $args Query arguments
      * @return array Array of passage objects
+     * @throws Exception
      */
-    public function get_all_passages($args = []) {
+    public function get_all_passages(array $args = []): array {
         $defaults = [
             'orderby' => 'created_at',
             'order' => 'DESC',
-            'limit' => 0,
+            'limit' => LUS_Constants::DEFAULT_PER_PAGE,
             'offset' => 0,
-            'difficulty_level' => 0,
             'search' => '',
-            'include_deleted' => false
+            'difficulty_level' => 0
         ];
 
         $args = wp_parse_args($args, $defaults);
-        $where = ['1=1'];
-        $where_args = [];
+        $cache_key = 'passages_' . md5(serialize($args));
 
-        if (!$args['include_deleted']) {
-            $where[] = 'deleted_at IS NULL';
-        }
+        return $this->cache_get($cache_key, function() use ($args) {
+            // Build WHERE clause
+            $where = [];
+            $where_args = [];
 
-        if ($args['difficulty_level']) {
-            $where[] = 'difficulty_level = %d';
-            $where_args[] = $args['difficulty_level'];
-        }
+            if ($args['difficulty_level']) {
+                $where[] = 'difficulty_level = %d';
+                $where_args[] = $args['difficulty_level'];
+            }
 
-        if ($args['search']) {
-            $where[] = '(title LIKE %s OR content LIKE %s)';
-            $search_term = '%' . $this->db->esc_like($args['search']) . '%';
-            $where_args[] = $search_term;
-            $where_args[] = $search_term;
-        }
+            if ($args['search']) {
+                $where[] = '(title LIKE %s OR content LIKE %s)';
+                $search = '%' . $this->db->esc_like($args['search']) . '%';
+                $where_args[] = $search;
+                $where_args[] = $search;
+            }
 
-        $limit_clause = $args['limit'] ? ' LIMIT ' . absint($args['limit']) : '';
-        $offset_clause = $args['offset'] ? ' OFFSET ' . absint($args['offset']) : '';
+            // Prepare final arguments
+            $query_args = array_merge(
+                $where_args,
+                [
+                    $args['orderby'],
+                    $args['order'],
+                    $args['limit'],
+                    $args['offset']
+                ]
+            );
 
-        $query = $this->db->prepare(
-            "SELECT * FROM {$this->db->prefix}lus_passages
-             WHERE " . implode(' AND ', $where) . "
-             ORDER BY {$args['orderby']} {$args['order']}
-             {$limit_clause}{$offset_clause}",
-            $where_args
-        );
+            // Build and execute query
+            $query = $this->prepare_query(
+                self::SQL['get_all_passages'],
+                $query_args
+            );
 
-        return $this->db->get_results($query);
+            $results = $this->db->get_results($query);
+            $this->handle_error('get_all_passages');
+
+            return $results;
+        });
     }
 
-    /**
-     * Update existing passage
+/**
+     * Create a new passage
      *
-     * @param int $passage_id Passage ID
-     * @param array $data Updated passage data
-     * @return bool|WP_Error True on success, error object on failure
+     * @param array $data Passage data
+     * @return int|WP_Error New passage ID or error
      */
-    public function update_passage($passage_id, $data) {
+    public function create_passage(array $data) {
         try {
             if (empty($data['title']) || empty($data['content'])) {
                 return new WP_Error('missing_fields', __('Title and content are required.', 'lus'));
             }
 
-            $update_data = [
-                'title' => $data['title'],
-                'content' => $data['content'],
-                'time_limit' => absint($data['time_limit']),
-                'difficulty_level' => isset($data['difficulty_level']) ? absint($data['difficulty_level']) : 1,
-                'updated_at' => current_time('mysql')
-            ];
+            $result = $this->db->insert(
+                $this->db->prefix . LUS_Constants::TABLE_PASSAGES,
+                [
+                    'title' => $data['title'],
+                    'content' => $data['content'],
+                    'time_limit' => isset($data['time_limit']) ? absint($data['time_limit']) : LUS_Constants::DEFAULT_TIME_LIMIT,
+                    'difficulty_level' => isset($data['difficulty_level']) ? absint($data['difficulty_level']) : LUS_Constants::DEFAULT_DIFFICULTY_LEVEL,
+                    'created_by' => get_current_user_id(),
+                    'created_at' => current_time('mysql')
+                ],
+                ['%s', '%s', '%d', '%d', '%d', '%s']
+            );
+
+            if ($result === false) {
+                throw new Exception($this->db->last_error);
+            }
+
+            $passage_id = $this->db->insert_id;
+            $this->clear_cache('passages');
+
+            return $passage_id;
+
+        } catch (Exception $e) {
+            return new WP_Error('db_error', $e->getMessage());
+        }
+    }
+
+    /**
+     * Update existing passage
+     *
+     * @param int   $passage_id Passage ID
+     * @param array $data       Updated passage data
+     * @return bool|WP_Error True on success, error object on failure
+     */
+    public function update_passage(int $passage_id, array $data) {
+        try {
+            if (empty($data['title']) || empty($data['content'])) {
+                return new WP_Error('missing_fields', __('Title and content are required.', 'lus'));
+            }
 
             $result = $this->db->update(
-                $this->db->prefix . 'lus_passages',
-                $update_data,
+                $this->db->prefix . LUS_Constants::TABLE_PASSAGES,
+                [
+                    'title' => $data['title'],
+                    'content' => $data['content'],
+                    'time_limit' => absint($data['time_limit']),
+                    'difficulty_level' => absint($data['difficulty_level']),
+                    'updated_at' => current_time('mysql')
+                ],
                 ['id' => $passage_id],
                 ['%s', '%s', '%d', '%d', '%s'],
                 ['%d']
             );
 
             if ($result === false) {
-                return new WP_Error('db_error', $this->db->last_error);
+                throw new Exception($this->db->last_error);
             }
 
-            $this->clear_cache("passage_{$passage_id}");
+            $this->clear_cache("passage_$passage_id");
             $this->clear_cache('passages');
+
             return true;
+
         } catch (Exception $e) {
-            return new WP_Error('exception', $e->getMessage());
+            return new WP_Error('db_error', $e->getMessage());
         }
     }
 
     /**
-     * Soft delete a passage
+     * Delete passage (soft delete)
      *
      * @param int $passage_id Passage ID
      * @return bool|WP_Error True on success, error object on failure
      */
-    public function delete_passage($passage_id) {
-        $this->begin_transaction();
+    public function delete_passage(int $passage_id) {
+        return $this->transaction(function() use ($passage_id) {
+            try {
+                // Check for dependencies
+                $has_recordings = $this->db->get_var($this->db->prepare(
+                    "SELECT COUNT(*) FROM {$this->db->prefix}" . LUS_Constants::TABLE_RECORDINGS .
+                    " WHERE passage_id = %d",
+                    $passage_id
+                ));
 
-        try {
-            // Check for dependencies
-            $has_recordings = $this->db->get_var($this->db->prepare(
-                "SELECT COUNT(*) FROM {$this->db->prefix}lus_recordings
-                 WHERE passage_id = %d",
-                $passage_id
-            ));
+                if ($has_recordings > 0) {
+                    // Soft delete
+                    $result = $this->db->update(
+                        $this->db->prefix . LUS_Constants::TABLE_PASSAGES,
+                        ['deleted_at' => current_time('mysql')],
+                        ['id' => $passage_id],
+                        ['%s'],
+                        ['%d']
+                    );
+                } else {
+                    // Hard delete
+                    $result = $this->db->delete(
+                        $this->db->prefix . LUS_Constants::TABLE_PASSAGES,
+                        ['id' => $passage_id],
+                        ['%d']
+                    );
+                }
 
-            if ($has_recordings > 0) {
-                // Soft delete if there are dependencies
-                $result = $this->db->update(
-                    $this->db->prefix . 'lus_passages',
-                    ['deleted_at' => current_time('mysql')],
-                    ['id' => $passage_id],
-                    ['%s'],
-                    ['%d']
-                );
-            } else {
-                // Hard delete if no dependencies
-                $result = $this->db->delete(
-                    $this->db->prefix . 'lus_passages',
-                    ['id' => $passage_id],
-                    ['%d']
-                );
+                if ($result === false) {
+                    throw new Exception($this->db->last_error);
+                }
+
+                $this->clear_cache("passage_$passage_id");
+                $this->clear_cache('passages');
+
+                return true;
+
+            } catch (Exception $e) {
+                return new WP_Error('delete_error', $e->getMessage());
             }
-
-            if ($result === false) {
-                throw new Exception($this->db->last_error);
-            }
-
-            $this->commit();
-            $this->clear_cache("passage_{$passage_id}");
-            $this->clear_cache('passages');
-            return true;
-
-        } catch (Exception $e) {
-            $this->rollback();
-            return new WP_Error('delete_error', $e->getMessage());
-        }
+        });
     }
 
     /**
      * Save new recording
      *
-     * @param array $data Recording data including file info and duration
+     * @param array $data Recording data
      * @return int|WP_Error New recording ID or error
      */
-    public function save_recording($data) {
+    public function save_recording(array $data) {
         try {
-            $user_id = get_current_user_id();
-            $recording_path = $this->get_recording_path($user_id);
-
-            if (!file_exists($recording_path)) {
-                wp_mkdir_p($recording_path);
-            }
-
             $insert_data = [
-                'user_id' => $user_id,
+                'user_id' => get_current_user_id(),
                 'passage_id' => isset($data['passage_id']) ? absint($data['passage_id']) : 0,
-                'audio_file_path' => str_replace($this->get_upload_path(), '', $data['file_path']),
+                'audio_file_path' => str_replace(LUS_Constants::UPLOAD_DIR, '', $data['file_path']),
                 'duration' => isset($data['duration']) ? absint($data['duration']) : 0,
-                'status' => 'pending',
+                'status' => LUS_Constants::STATUS_PENDING,
                 'created_at' => current_time('mysql')
             ];
 
             $result = $this->db->insert(
-                $this->db->prefix . 'lus_recordings',
+                $this->db->prefix . LUS_Constants::TABLE_RECORDINGS,
                 $insert_data,
                 ['%d', '%d', '%s', '%d', '%s', '%s']
             );
 
             if ($result === false) {
-                return new WP_Error('db_error', __('Failed to save recording data.', 'lus'));
+                throw new Exception($this->db->last_error);
             }
 
+            $recording_id = $this->db->insert_id;
             $this->clear_cache('recordings');
-            return $this->db->insert_id;
+
+            return $recording_id;
 
         } catch (Exception $e) {
-            return new WP_Error('exception', $e->getMessage());
+            return new WP_Error('db_error', $e->getMessage());
         }
-    }
-
-    /**
-     * Get recording by ID
-     *
-     * @param int $recording_id Recording ID
-     * @return object|null Recording object with user details or null if not found
-     */
-    public function get_recording($recording_id) {
-        $cache_key = "recording_{$recording_id}";
-
-        if (isset($this->cache[$cache_key])) {
-            return $this->cache[$cache_key];
-        }
-
-        $recording = $this->db->get_row($this->db->prepare(
-            "SELECT r.*, u.display_name, u.user_email,
-                    p.title as passage_title, p.difficulty_level
-             FROM {$this->db->prefix}lus_recordings r
-             JOIN {$this->db->users} u ON r.user_id = u.ID
-             LEFT JOIN {$this->db->prefix}lus_passages p ON r.passage_id = p.id
-             WHERE r.id = %d",
-            $recording_id
-        ));
-
-        if ($recording) {
-            $this->cache[$cache_key] = $recording;
-        }
-
-        return $recording;
-    }
-
-    /**
-     * Get recordings for a user with optional filtering
-     *
-     * @param int $user_id User ID
-     * @param array $args Query arguments
-     * @return array Array of recording objects
-     */
-    public function get_user_recordings($user_id, $args = []) {
-        $defaults = [
-            'passage_id' => 0,
-            'status' => '',
-            'limit' => 10,
-            'offset' => 0,
-            'orderby' => 'created_at',
-            'order' => 'DESC'
-        ];
-
-        $args = wp_parse_args($args, $defaults);
-        $where = ['r.user_id = %d'];
-        $where_args = [$user_id];
-
-        if ($args['passage_id']) {
-            $where[] = 'r.passage_id = %d';
-            $where_args[] = $args['passage_id'];
-        }
-
-        if ($args['status']) {
-            $where[] = 'r.status = %s';
-            $where_args[] = $args['status'];
-        }
-
-        $query = $this->db->prepare(
-            "SELECT r.*, p.title as passage_title
-             FROM {$this->db->prefix}lus_recordings r
-             LEFT JOIN {$this->db->prefix}lus_passages p ON r.passage_id = p.id
-             WHERE " . implode(' AND ', $where) . "
-             ORDER BY r.{$args['orderby']} {$args['order']}
-             LIMIT %d OFFSET %d",
-            array_merge($where_args, [$args['limit'], $args['offset']])
-        );
-
-        return $this->db->get_results($query);
     }
 
     /**
      * Update recording status and metadata
      *
-     * @param int $recording_id Recording ID
-     * @param array $data Updated recording data
+     * @param int   $recording_id Recording ID
+     * @param array $data         Updated recording data
      * @return bool|WP_Error True on success, error object on failure
      */
-    public function update_recording($recording_id, $data) {
+    public function update_recording(int $recording_id, array $data) {
         try {
             $update_data = [];
             $format = [];
@@ -421,10 +546,6 @@ class LUS_Database {
                 $update_data['status'] = sanitize_text_field($data['status']);
                 $format[] = '%s';
             }
-            if (isset($data['audio_file_path'])) {
-                $update_data['audio_file_path'] = sanitize_text_field($data['audio_file_path']);
-                $format[] = '%s';
-            }
 
             if (empty($update_data)) {
                 return new WP_Error('no_data', __('No data provided for update.', 'lus'));
@@ -434,7 +555,7 @@ class LUS_Database {
             $format[] = '%s';
 
             $result = $this->db->update(
-                $this->db->prefix . 'lus_recordings',
+                $this->db->prefix . LUS_Constants::TABLE_RECORDINGS,
                 $update_data,
                 ['id' => $recording_id],
                 $format,
@@ -442,15 +563,16 @@ class LUS_Database {
             );
 
             if ($result === false) {
-                return new WP_Error('db_error', $this->db->last_error);
+                throw new Exception($this->db->last_error);
             }
 
-            $this->clear_cache("recording_{$recording_id}");
+            $this->clear_cache("recording_$recording_id");
             $this->clear_cache('recordings');
+
             return true;
 
         } catch (Exception $e) {
-            return new WP_Error('exception', $e->getMessage());
+            return new WP_Error('update_error', $e->getMessage());
         }
     }
 
@@ -460,312 +582,180 @@ class LUS_Database {
      * @param int $recording_id Recording ID
      * @return bool True on success, false on failure
      */
-    public function delete_recording($recording_id) {
-        $this->begin_transaction();
+    public function delete_recording(int $recording_id): bool {
+        return $this->transaction(function() use ($recording_id) {
+            try {
+                // Get recording info first
+                $recording = $this->get_recording($recording_id);
+                if (!$recording) {
+                    throw new Exception('Recording not found');
+                }
 
-        try {
-            // Get recording info first
-            $recording = $this->get_recording($recording_id);
-            if (!$recording) {
-                throw new Exception('Recording not found');
-            }
-
-            // Delete file if it exists
-            if ($recording->audio_file_path) {
-                $file_path = $this->get_upload_path() . $recording->audio_file_path;
-                if (file_exists($file_path)) {
-                    if (!@unlink($file_path)) {
-                        throw new Exception('Failed to delete audio file');
+                // Delete file if it exists
+                if ($recording->audio_file_path) {
+                    $file_path = LUS_Constants::UPLOAD_DIR . $recording->audio_file_path;
+                    if (file_exists($file_path)) {
+                        if (!@unlink($file_path)) {
+                            throw new Exception('Failed to delete audio file');
+                        }
                     }
                 }
+
+                // Delete database record
+                $result = $this->db->delete(
+                    $this->db->prefix . LUS_Constants::TABLE_RECORDINGS,
+                    ['id' => $recording_id],
+                    ['%d']
+                );
+
+                if ($result === false) {
+                    throw new Exception($this->db->last_error);
+                }
+
+                $this->clear_cache("recording_$recording_id");
+                $this->clear_cache('recordings');
+
+                return true;
+
+            } catch (Exception $e) {
+                error_log('LUS: Error deleting recording: ' . $e->getMessage());
+                return false;
             }
-
-            // Delete database record
-            $result = $this->db->delete(
-                $this->db->prefix . 'lus_recordings',
-                ['id' => $recording_id],
-                ['%d']
-            );
-
-            if ($result === false) {
-                throw new Exception($this->db->last_error);
-            }
-
-            $this->commit();
-            $this->clear_cache("recording_{$recording_id}");
-            $this->clear_cache('recordings');
-            return true;
-
-        } catch (Exception $e) {
-            $this->rollback();
-            error_log('LUS: Error deleting recording: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-
-    /**
-     * Create new question
-     *
-     * @param array $data Question data
-     * @return int|WP_Error New question ID or error
-     */
-    public function create_question($data) {
-        try {
-            if (empty($data['passage_id']) || empty($data['question_text']) || empty($data['correct_answer'])) {
-                return new WP_Error('missing_fields', __('All fields are required.', 'lus'));
-            }
-
-            // Validate passage exists
-            if (!$this->get_passage($data['passage_id'])) {
-                return new WP_Error('invalid_passage', __('Invalid passage ID.', 'lus'));
-            }
-
-            $insert_data = [
-                'passage_id' => absint($data['passage_id']),
-                'question_text' => wp_kses_post($data['question_text']),
-                'correct_answer' => sanitize_text_field($data['correct_answer']),
-                'weight' => isset($data['weight']) ? floatval($data['weight']) : 1.0,
-                'active' => isset($data['active']) ? absint($data['active']) : 1,
-                'created_at' => current_time('mysql')
-            ];
-
-            $result = $this->db->insert(
-                $this->db->prefix . 'lus_questions',
-                $insert_data,
-                ['%d', '%s', '%s', '%f', '%d', '%s']
-            );
-
-            if ($result === false) {
-                return new WP_Error('db_error', $this->db->last_error);
-            }
-
-            $this->clear_cache('questions_passage_' . $data['passage_id']);
-            return $this->db->insert_id;
-
-        } catch (Exception $e) {
-            return new WP_Error('exception', $e->getMessage());
-        }
+        });
     }
 
     /**
-     * Get question by ID
+     * Get total count of orphaned recordings
      *
-     * @param int $question_id Question ID
-     * @return object|null Question object with passage info or null if not found
+     * @return int Number of recordings needing repair
      */
-    public function get_question($question_id) {
-        $cache_key = "question_{$question_id}";
+    public function get_total_orphaned_recordings(): int {
+        return (int)$this->cache_get('orphaned_recordings_count', function() {
+            return $this->db->get_var("
+                SELECT COUNT(*)
+                FROM {$this->db->prefix}" . LUS_Constants::TABLE_RECORDINGS . "
+                WHERE passage_id = 0 OR passage_id IS NULL"
+            );
+        });
+    }
 
-        if (isset($this->cache[$cache_key])) {
-            return $this->cache[$cache_key];
-        }
+    /**
+     * Get assessment details
+     *
+     * @param int $assessment_id Assessment ID
+     * @return object|null Assessment object or null if not found
+     */
+    public function get_assessment(int $assessment_id): ?object {
+        return $this->cache_get("assessment_$assessment_id", function() use ($assessment_id) {
+            $query = $this->prepare_query(
+                self::SQL['get_assessment'],
+                [$assessment_id]
+            );
 
-        $question = $this->db->get_row($this->db->prepare(
-            "SELECT q.*, p.title as passage_title
-             FROM {$this->db->prefix}lus_questions q
-             JOIN {$this->db->prefix}lus_passages p ON q.passage_id = p.id
-             WHERE q.id = %d",
-            $question_id
-        ));
+            $result = $this->db->get_row($query);
+            $this->handle_error('get_assessment');
 
-        if ($question) {
-            $this->cache[$cache_key] = $question;
-        }
+            return $result;
+        });
+    }
 
-        return $question;
+    /**
+     * Save assessment for a recording
+     *
+     * @param array $data Assessment data
+     * @return int|WP_Error Assessment ID or error
+     */
+    public function save_assessment(array $data) {
+        return $this->transaction(function() use ($data) {
+            try {
+                if (empty($data['recording_id'])) {
+                    throw new Exception(__('Recording ID is required.', 'lus'));
+                }
+
+                // Verify recording exists
+                $recording = $this->get_recording($data['recording_id']);
+                if (!$recording) {
+                    throw new Exception(__('Invalid recording ID.', 'lus'));
+                }
+
+                $insert_data = [
+                    'recording_id' => absint($data['recording_id']),
+                    'total_score' => floatval($data['total_score']),
+                    'normalized_score' => floatval($data['normalized_score']),
+                    'assessed_by' => get_current_user_id(),
+                    'completed_at' => current_time('mysql')
+                ];
+
+                $result = $this->db->insert(
+                    $this->db->prefix . LUS_Constants::TABLE_ASSESSMENTS,
+                    $insert_data,
+                    ['%d', '%f', '%f', '%d', '%s']
+                );
+
+                if ($result === false) {
+                    throw new Exception($this->db->last_error);
+                }
+
+                $assessment_id = $this->db->insert_id;
+
+                // Update recording status
+                $this->update_recording($data['recording_id'], [
+                    'status' => LUS_Constants::STATUS_ASSESSED
+                ]);
+
+                $this->clear_cache("assessment_$assessment_id");
+                $this->clear_cache("recording_{$data['recording_id']}");
+
+                return $assessment_id;
+
+            } catch (Exception $e) {
+                return new WP_Error('assessment_error', $e->getMessage());
+            }
+        });
     }
 
     /**
      * Get questions for a passage
      *
-     * @param int $passage_id Passage ID
-     * @param array $args Optional arguments
+     * @param int   $passage_id  Passage ID
+     * @param array $args        Optional arguments
      * @return array Array of question objects
      */
-    public function get_questions_for_passage($passage_id, $args = []) {
-        $defaults = [
-            'active_only' => true,
-            'orderby' => 'id',
-            'order' => 'ASC',
-            'include_stats' => false
-        ];
+    public function get_questions_for_passage(int $passage_id, array $args = []): array {
+        $cache_key = "questions_passage_{$passage_id}_" . md5(serialize($args));
 
-        $args = wp_parse_args($args, $defaults);
-        $cache_key = "questions_passage_{$passage_id}";
-
-        if (isset($this->cache[$cache_key]) && !$args['include_stats']) {
-            return $this->cache[$cache_key];
-        }
-
-        $where = ['q.passage_id = %d'];
-        $where_args = [$passage_id];
-
-        if ($args['active_only']) {
-            $where[] = 'q.active = 1';
-        }
-
-        if ($args['include_stats']) {
-            $query = $this->db->prepare(
-                "SELECT q.*,
-                        COUNT(r.id) as total_responses,
-                        SUM(r.is_correct) as correct_responses,
-                        AVG(r.similarity) as avg_similarity
-                 FROM {$this->db->prefix}lus_questions q
-                 LEFT JOIN {$this->db->prefix}lus_responses r ON q.id = r.question_id
-                 WHERE " . implode(' AND ', $where) . "
-                 GROUP BY q.id
-                 ORDER BY q.{$args['orderby']} {$args['order']}",
-                $where_args
+        return $this->cache_get($cache_key, function() use ($passage_id, $args) {
+            $query = $this->prepare_query(
+                self::SQL['get_passage_questions'],
+                [$passage_id]
             );
-        } else {
-            $query = $this->db->prepare(
-                "SELECT q.*
-                 FROM {$this->db->prefix}lus_questions q
-                 WHERE " . implode(' AND ', $where) . "
-                 ORDER BY q.{$args['orderby']} {$args['order']}",
-                $where_args
-            );
-        }
 
-        $questions = $this->db->get_results($query);
+            $results = $this->db->get_results($query);
+            $this->handle_error('get_questions_for_passage');
 
-        if (!$args['include_stats']) {
-            $this->cache[$cache_key] = $questions;
-        }
-
-        return $questions;
+            return $results;
+        });
     }
 
     /**
-     * Update existing question
+     * Get responses for a recording
      *
-     * @param int $question_id Question ID
-     * @param array $data Updated question data
-     * @return bool|WP_Error True on success, error object on failure
+     * @param int $recording_id Recording ID
+     * @return array Array of response objects
      */
-    public function update_question($question_id, $data) {
-        try {
-            if (empty($data['question_text']) || empty($data['correct_answer'])) {
-                return new WP_Error('missing_fields', __('Question text and correct answer are required.', 'lus'));
-            }
-
-            $update_data = [
-                'question_text' => wp_kses_post($data['question_text']),
-                'correct_answer' => sanitize_text_field($data['correct_answer']),
-                'weight' => isset($data['weight']) ? floatval($data['weight']) : 1.0,
-                'active' => isset($data['active']) ? absint($data['active']) : 1,
-                'updated_at' => current_time('mysql')
-            ];
-
-            $result = $this->db->update(
-                $this->db->prefix . 'lus_questions',
-                $update_data,
-                ['id' => $question_id],
-                ['%s', '%s', '%f', '%d', '%s'],
-                ['%d']
+    public function get_recording_responses(int $recording_id): array {
+        return $this->cache_get("responses_recording_$recording_id", function() use ($recording_id) {
+            $query = $this->prepare_query(
+                self::SQL['get_recording_responses'],
+                [$recording_id]
             );
 
-            if ($result === false) {
-                return new WP_Error('db_error', $this->db->last_error);
-            }
+            $results = $this->db->get_results($query);
+            $this->handle_error('get_recording_responses');
 
-            // Clear relevant caches
-            $question = $this->get_question($question_id);
-            if ($question) {
-                $this->clear_cache('questions_passage_' . $question->passage_id);
-            }
-            $this->clear_cache("question_{$question_id}");
-
-            return true;
-
-        } catch (Exception $e) {
-            return new WP_Error('exception', $e->getMessage());
-        }
+            return $results;
+        });
     }
-
-    /**
-     * Delete or deactivate question based on usage
-     *
-     * @param int $question_id Question ID
-     * @return bool|WP_Error True on success, error object on failure
-     */
-    public function delete_question($question_id) {
-        $this->begin_transaction();
-
-        try {
-            // Check if question has responses
-            $has_responses = $this->db->get_var($this->db->prepare(
-                "SELECT COUNT(*)
-                 FROM {$this->db->prefix}lus_responses
-                 WHERE question_id = %d",
-                $question_id
-            ));
-
-            // Get question for cache clearing
-            $question = $this->get_question($question_id);
-
-            if ($has_responses > 0) {
-                // Soft delete by deactivating
-                $result = $this->db->update(
-                    $this->db->prefix . 'lus_questions',
-                    ['active' => 0, 'updated_at' => current_time('mysql')],
-                    ['id' => $question_id],
-                    ['%d', '%s'],
-                    ['%d']
-                );
-            } else {
-                // Hard delete if no responses
-                $result = $this->db->delete(
-                    $this->db->prefix . 'lus_questions',
-                    ['id' => $question_id],
-                    ['%d']
-                );
-            }
-
-            if ($result === false) {
-                throw new Exception($this->db->last_error);
-            }
-
-            $this->commit();
-
-            // Clear caches
-            if ($question) {
-                $this->clear_cache('questions_passage_' . $question->passage_id);
-            }
-            $this->clear_cache("question_{$question_id}");
-
-            return true;
-
-        } catch (Exception $e) {
-            $this->rollback();
-            return new WP_Error('delete_error', $e->getMessage());
-        }
-    }
-
-    /**
-     * Get question statistics
-     *
-     * @param int $question_id Question ID
-     * @return object|null Statistics object or null if not found
-     */
-    public function get_question_statistics($question_id) {
-        return $this->db->get_row($this->db->prepare(
-            "SELECT
-                COUNT(r.id) as total_responses,
-                SUM(r.is_correct) as correct_responses,
-                AVG(r.score) as average_score,
-                AVG(r.similarity) as average_similarity,
-                MIN(r.created_at) as first_response,
-                MAX(r.created_at) as last_response
-            FROM {$this->db->prefix}lus_questions q
-            LEFT JOIN {$this->db->prefix}lus_responses r ON q.id = r.question_id
-            WHERE q.id = %d
-            GROUP BY q.id",
-            $question_id
-        ));
-    }
-
 
     /**
      * Save a response to a question
@@ -773,7 +763,7 @@ class LUS_Database {
      * @param array $data Response data
      * @return int|WP_Error Response ID or error
      */
-    public function save_response($data) {
+    public function save_response(array $data) {
         try {
             if (empty($data['recording_id']) || empty($data['question_id']) || !isset($data['user_answer'])) {
                 return new WP_Error('missing_fields', __('All fields are required.', 'lus'));
@@ -785,222 +775,284 @@ class LUS_Database {
                 return new WP_Error('invalid_question', __('Invalid question ID.', 'lus'));
             }
 
-            // Calculate similarity and correctness
-            $similarity = $this->calculate_similarity(
-                $question->correct_answer,
-                $data['user_answer']
-            );
-
             $insert_data = [
                 'recording_id' => absint($data['recording_id']),
                 'question_id' => absint($data['question_id']),
                 'user_answer' => sanitize_text_field($data['user_answer']),
-                'is_correct' => ($similarity >= 90) ? 1 : 0,
-                'score' => $similarity >= 90 ? $question->weight : 0,
-                'similarity' => $similarity,
+                'is_correct' => isset($data['is_correct']) ? absint($data['is_correct']) : 0,
+                'score' => isset($data['score']) ? floatval($data['score']) : 0,
+                'similarity' => isset($data['similarity']) ? floatval($data['similarity']) : 0,
                 'created_at' => current_time('mysql')
             ];
 
             $result = $this->db->insert(
-                $this->db->prefix . 'lus_responses',
+                $this->db->prefix . LUS_Constants::TABLE_RESPONSES,
                 $insert_data,
                 ['%d', '%d', '%s', '%d', '%f', '%f', '%s']
-            );
-
-            if ($result === false) {
-                return new WP_Error('db_error', $this->db->last_error);
-            }
-
-            $this->clear_cache('responses_recording_' . $data['recording_id']);
-            return $this->db->insert_id;
-
-        } catch (Exception $e) {
-            return new WP_Error('exception', $e->getMessage());
-        }
-    }
-
-    /**
-     * Calculate similarity between two strings
-     *
-     * @param string $str1 First string
-     * @param string $str2 Second string
-     * @return float Similarity percentage
-     */
-    private function calculate_similarity($str1, $str2) {
-        $str1 = strtolower(trim($str1));
-        $str2 = strtolower(trim($str2));
-
-        if ($str1 === $str2) {
-            return 100;
-        }
-
-        $leven = levenshtein($str1, $str2);
-        $max_len = max(strlen($str1), strlen($str2));
-
-        if ($max_len === 0) {
-            return 100;
-        }
-
-        return (1 - ($leven / $max_len)) * 100;
-    }
-
-    /**
-     * Save assessment for a recording
-     *
-     * @param array $data Assessment data
-     * @return int|WP_Error Assessment ID or error
-     */
-    public function save_assessment($data) {
-        $this->begin_transaction();
-
-        try {
-            if (empty($data['recording_id'])) {
-                throw new Exception(__('Recording ID is required.', 'lus'));
-            }
-
-            // Verify recording exists
-            $recording = $this->get_recording($data['recording_id']);
-            if (!$recording) {
-                throw new Exception(__('Invalid recording ID.', 'lus'));
-            }
-
-            // Calculate scores if not provided
-            if (!isset($data['total_score']) || !isset($data['normalized_score'])) {
-                $scores = $this->calculate_recording_scores($data['recording_id']);
-                $data['total_score'] = $scores['total_score'];
-                $data['normalized_score'] = $scores['normalized_score'];
-            }
-
-            $insert_data = [
-                'recording_id' => absint($data['recording_id']),
-                'total_score' => floatval($data['total_score']),
-                'normalized_score' => floatval($data['normalized_score']),
-                'assessed_by' => get_current_user_id(),
-                'completed_at' => current_time('mysql')
-            ];
-
-            $result = $this->db->insert(
-                $this->db->prefix . 'lus_assessments',
-                $insert_data,
-                ['%d', '%f', '%f', '%d', '%s']
             );
 
             if ($result === false) {
                 throw new Exception($this->db->last_error);
             }
 
-            // Update recording status
-            $this->update_recording($data['recording_id'], ['status' => 'assessed']);
+            $response_id = $this->db->insert_id;
+            $this->clear_cache('responses_recording_' . $data['recording_id']);
 
-            $this->commit();
-            $this->clear_cache('assessments_recording_' . $data['recording_id']);
-            return $this->db->insert_id;
+            return $response_id;
 
         } catch (Exception $e) {
-            $this->rollback();
-            return new WP_Error('assessment_error', $e->getMessage());
+            return new WP_Error('db_error', $e->getMessage());
         }
     }
 
     /**
-     * Calculate scores for a recording based on responses
+     * Get passage assessment statistics
      *
-     * @param int $recording_id Recording ID
-     * @return array Calculated scores
+     * @param int         $passage_id  Passage ID
+     * @param string|null $date_limit  Optional date limit
+     * @return object|null Statistics object
      */
-    private function calculate_recording_scores($recording_id) {
-        $responses = $this->db->get_results($this->db->prepare(
-            "SELECT r.*, q.weight
-             FROM {$this->db->prefix}lus_responses r
-             JOIN {$this->db->prefix}lus_questions q ON r.question_id = q.id
-             WHERE r.recording_id = %d",
-            $recording_id
-        ));
+    public function get_passage_assessment_stats(int $passage_id, ?string $date_limit = null): ?object {
+        $cache_key = "passage_stats_{$passage_id}" . ($date_limit ? "_" . md5($date_limit) : "");
 
-        $total_score = 0;
-        $total_weight = 0;
+        return $this->cache_get($cache_key, function() use ($passage_id, $date_limit) {
+            $date_filter = '';
+            if ($date_limit) {
+                $date_filter = $this->db->prepare(
+                    "AND r.created_at >= %s",
+                    $date_limit
+                );
+            }
 
-        foreach ($responses as $response) {
-            $total_score += $response->score;
-            $total_weight += $response->weight;
+            $query = $this->prepare_query(
+                str_replace('{date_filter}', $date_filter, self::SQL['get_passage_stats']),
+                [$passage_id]
+            );
+
+            $result = $this->db->get_row($query);
+            $this->handle_error('get_passage_assessment_stats');
+
+            return $result;
+        });
+    }
+
+    /**
+     * Assign a passage to a user
+     *
+     * @param int         $passage_id  The ID of the passage to assign
+     * @param int         $user_id     The ID of the user receiving the assignment
+     * @param int         $assigned_by ID of the user making the assignment
+     * @param string|null $due_date    Optional due date for the assignment
+     * @return bool|WP_Error True on success, WP_Error on failure
+     */
+    public function assign_passage_to_user(
+        int $passage_id,
+        int $user_id,
+        int $assigned_by,
+        ?string $due_date = null
+    ) {
+        try {
+            if (empty($passage_id) || empty($user_id) || empty($assigned_by)) {
+                return new WP_Error('missing_data', __('Required fields missing', 'lus'));
+            }
+
+            // Verify the passage exists
+            $passage = $this->get_passage($passage_id);
+            if (!$passage) {
+                return new WP_Error('invalid_passage', __('Invalid passage ID', 'lus'));
+            }
+
+            // Verify the user exists
+            $user = get_user_by('id', $user_id);
+            if (!$user) {
+                return new WP_Error('invalid_user', __('Invalid user ID', 'lus'));
+            }
+
+            $insert_data = [
+                'passage_id' => $passage_id,
+                'user_id' => $user_id,
+                'assigned_by' => $assigned_by,
+                'assigned_at' => current_time('mysql'),
+                'status' => LUS_Constants::STATUS_PENDING
+            ];
+
+            $formats = ['%d', '%d', '%d', '%s', '%s'];
+
+            if ($due_date) {
+                $insert_data['due_date'] = $due_date;
+                $formats[] = '%s';
+            }
+
+            $result = $this->db->insert(
+                $this->db->prefix . LUS_Constants::TABLE_ASSIGNMENTS,
+                $insert_data,
+                $formats
+            );
+
+            if ($result === false) {
+                throw new Exception($this->db->last_error);
+            }
+
+            $this->clear_cache('assignments_user_' . $user_id);
+            $this->clear_cache('assignments_passage_' . $passage_id);
+
+            return true;
+
+        } catch (Exception $e) {
+            return new WP_Error('db_error', $e->getMessage());
         }
+    }
 
-        return [
-            'total_score' => $total_score,
-            'normalized_score' => $total_weight > 0 ? ($total_score / $total_weight) * 100 : 0
+    /**
+     * Get all assignments with optional filtering
+     *
+     * @param array $args Query arguments
+     * @return array Array of assignment objects
+     */
+    public function get_all_assignments(array $args = []): array {
+        $defaults = [
+            'orderby' => 'assigned_at',
+            'order' => 'DESC',
+            'limit' => LUS_Constants::DEFAULT_PER_PAGE,
+            'offset' => 0,
+            'status' => '',
+            'search' => ''
         ];
+
+        $args = wp_parse_args($args, $defaults);
+        $cache_key = 'assignments_' . md5(serialize($args));
+
+        return $this->cache_get($cache_key, function() use ($args) {
+            // Build the query
+            $where = ['1=1'];
+            $where_args = [];
+
+            if ($args['status']) {
+                $where[] = 'a.status = %s';
+                $where_args[] = $args['status'];
+            }
+
+            if ($args['search']) {
+                $where[] = '(p.title LIKE %s OR u.display_name LIKE %s)';
+                $search_term = '%' . $this->db->esc_like($args['search']) . '%';
+                $where_args[] = $search_term;
+                $where_args[] = $search_term;
+            }
+
+            // Add paging parameters
+            $where_args[] = $args['limit'];
+            $where_args[] = $args['offset'];
+
+            $query = $this->db->prepare(
+                "SELECT a.*, u.display_name AS user_name, p.title AS passage_title
+                FROM {$this->db->prefix}" . LUS_Constants::TABLE_ASSIGNMENTS . " a
+                LEFT JOIN {$this->db->users} u ON a.user_id = u.ID
+                LEFT JOIN {$this->db->prefix}" . LUS_Constants::TABLE_PASSAGES . " p
+                    ON a.passage_id = p.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY a.{$args['orderby']} {$args['order']}
+                LIMIT %d OFFSET %d",
+                $where_args
+            );
+
+            $results = $this->db->get_results($query);
+            $this->handle_error('get_all_assignments');
+
+            return $results;
+        });
+    }
+
+
+
+
+
+
+
+    /**
+     * Get total count of recordings
+     *
+     * @return int Total number of recordings
+     */
+    public function get_recordings_count(): int {
+        return (int)$this->cache_get('recordings_count', function() {
+            return $this->db->get_var("
+                SELECT COUNT(*)
+                FROM {$this->db->prefix}lus_recordings
+            ");
+        });
     }
 
     /**
-     * Get responses for a recording
+     * Get recordings with optional filtering
      *
-     * @param int $recording_id Recording ID
-     * @return array Array of response objects
+     * @param array $args Query arguments
+     * @return array Array of recording objects
+     * @throws Exception
      */
-    public function get_recording_responses($recording_id) {
-        $cache_key = "responses_recording_{$recording_id}";
+    public function get_recordings(array $args = []): array {
+        $defaults = [
+            'user_id' => 0,
+            'passage_id' => 0,
+            'status' => '',
+            'limit' => LUS_Constants::DEFAULT_PER_PAGE,
+            'offset' => 0,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+            'with_user' => true,
+            'with_assessments' => false
+        ];
 
-        if (isset($this->cache[$cache_key])) {
-            return $this->cache[$cache_key];
-        }
+        $args = wp_parse_args($args, $defaults);
+        $cache_key = 'recordings_' . md5(serialize($args));
 
-        $responses = $this->db->get_results($this->db->prepare(
-            "SELECT r.*, q.question_text, q.correct_answer, q.weight
-             FROM {$this->db->prefix}lus_responses r
-             JOIN {$this->db->prefix}lus_questions q ON r.question_id = q.id
-             WHERE r.recording_id = %d
-             ORDER BY q.id ASC",
-            $recording_id
-        ));
+        return $this->cache_get($cache_key, function() use ($args) {
+            $where = [];
+            $where_args = [];
 
-        if ($responses) {
-            $this->cache[$cache_key] = $responses;
-        }
+            if ($args['user_id']) {
+                $where[] = 'r.user_id = %d';
+                $where_args[] = $args['user_id'];
+            }
 
-        return $responses;
+            if ($args['passage_id']) {
+                $where[] = 'r.passage_id = %d';
+                $where_args[] = $args['passage_id'];
+            }
+
+            if ($args['status']) {
+                $where[] = 'r.status = %s';
+                $where_args[] = $args['status'];
+            }
+
+            $where_clause = !empty($where) ?
+                'AND ' . implode(' AND ', $where) : '';
+
+            // Replace placeholder in query template
+            $query = str_replace(
+                '{where}',
+                $where_clause,
+                self::SQL['get_recordings']
+            );
+
+            // Add limit/offset to where args
+            $where_args[] = $args['limit'];
+            $where_args[] = $args['offset'];
+
+            // Prepare and execute query
+            $query = $this->prepare_query($query, $where_args);
+            $results = $this->db->get_results($query);
+
+            $this->handle_error('get_recordings');
+
+            // Add assessment counts if requested
+            if ($args['with_assessments']) {
+                foreach ($results as $recording) {
+                    $recording->assessment_count = $this->get_assessment_count($recording->id);
+                }
+            }
+
+            return $results;
+        });
     }
 
-    /**
-     * Get assessment details
-     *
-     * @param int $assessment_id Assessment ID
-     * @return object|null Assessment object or null if not found
-     */
-    public function get_assessment($assessment_id) {
-        return $this->db->get_row($this->db->prepare(
-            "SELECT a.*,
-                    r.passage_id,
-                    u.display_name as assessor_name,
-                    p.title as passage_title
-             FROM {$this->db->prefix}lus_assessments a
-             JOIN {$this->db->prefix}lus_recordings r ON a.recording_id = r.id
-             JOIN {$this->db->users} u ON a.assessed_by = u.ID
-             JOIN {$this->db->prefix}lus_passages p ON r.passage_id = p.id
-             WHERE a.id = %d",
-            $assessment_id
-        ));
-    }
-
-    /**
-     * Get assessment statistics for a passage
-     *
-     * @param int $passage_id Passage ID
-     * @return object Statistics object
-     */
-    public function get_passage_assessment_stats($passage_id) {
-        return $this->db->get_row($this->db->prepare(
-            "SELECT
-                COUNT(DISTINCT r.id) as total_recordings,
-                COUNT(DISTINCT a.id) as total_assessments,
-                AVG(a.normalized_score) as average_score,
-                MIN(a.normalized_score) as min_score,
-                MAX(a.normalized_score) as max_score,
-                AVG(r.duration) as average_duration,
-                COUNT(DISTINCT r.user_id) as unique_users
-             FROM {$this->db->prefix}lus_recordings r
-             LEFT JOIN {$this->db->prefix}lus_assessments a ON r.id = a.recording_id
-             WHERE r.passage_id = %d",
-            $passage_id
-        ));
-    }
 }

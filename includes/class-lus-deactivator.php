@@ -47,11 +47,8 @@ class LUS_Deactivator {
      * Remove uploaded files and directories
      */
     private static function remove_uploads() {
-        $upload_dir = wp_upload_dir();
-        $lus_dir = $upload_dir['basedir'] . '/lus';
-
-        if (file_exists($lus_dir)) {
-            self::recursive_remove_directory($lus_dir);
+        if (file_exists(LUS_Constants::UPLOAD_DIR)) {
+            self::recursive_remove_directory(LUS_Constants::UPLOAD_DIR);
         }
     }
 

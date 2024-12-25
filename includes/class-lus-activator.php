@@ -14,11 +14,41 @@ class LUS_Activator {
      * Create the necessary database tables and plugin setup.
      */
     public static function activate() {
+        // Create upload directory if it doesn't exist
+        if (!file_exists( LUS_Constants::UPLOAD_DIR )) {
+            if (!wp_mkdir_p( LUS_Constants::UPLOAD_DIR )) {
+                wp_die(__('Kunde inte skapa uppladdningskatalogen.', 'lus'));
+            }
+        }
+        // Set directory permissions
+        chmod(LUS_Constants::UPLOAD_DIR, 0755);
+
+        self::check_requirements();
         self::create_database_tables();
         self::upgrade_database_schema();
         self::create_directories();
         self::set_plugin_options();
         self::migrate_data_if_needed();
+        self::schedule_tasks();
+    }
+
+    /**
+     * Verify requirements
+     */
+    private static function check_requirements() {
+        global $wpdb;
+
+        // Check MySQL version
+        $mysql_version = $wpdb->db_version();
+        if (version_compare($mysql_version, '5.6', '<')) {
+            wp_die(__('LUS kräver MySQL 5.6 eller högre.', 'lus'));
+        }
+
+        // Check write permissions
+        $upload_dir = wp_upload_dir();
+        if (!wp_is_writable( LUS_Constants::UPLOAD_DIR )) {
+            wp_die(__('LUS kräver skrivrättigheter i uppladdningskatalogen.', 'lus'));
+        }
     }
 
     /**
@@ -136,28 +166,21 @@ class LUS_Activator {
             ) {$charset_collate}",
 
             // Assignments
-            'lus_assignments' => "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}lus_assignments (
+            $sql_assignments = "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}lus_assignments (
                 id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
                 user_id bigint(20) UNSIGNED NOT NULL,
                 passage_id bigint(20) UNSIGNED NOT NULL,
                 assigned_by bigint(20) UNSIGNED NOT NULL,
                 assigned_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 due_date datetime DEFAULT NULL,
-                completed_at datetime DEFAULT NULL,
                 status varchar(20) DEFAULT 'pending',
                 PRIMARY KEY (id),
                 KEY user_id (user_id),
                 KEY passage_id (passage_id),
-                KEY idx_status (status),
-                KEY idx_due_date (due_date),
-                CONSTRAINT fk_assignment_user
-                    FOREIGN KEY (user_id)
-                    REFERENCES {$wpdb->users} (ID)
-                    ON DELETE CASCADE,
-                CONSTRAINT fk_assignment_passage
-                    FOREIGN KEY (passage_id)
-                    REFERENCES {$wpdb->prefix}lus_passages (id)
-                    ON DELETE CASCADE
+                CONSTRAINT fk_lus_assignment_user FOREIGN KEY (user_id)
+                    REFERENCES {$wpdb->users} (ID) ON DELETE CASCADE,
+                CONSTRAINT fk_lus_assignment_passage FOREIGN KEY (passage_id)
+                    REFERENCES {$wpdb->prefix}lus_passages (id) ON DELETE CASCADE
             ) {$charset_collate}",
 
             // Admin Activity Tracking
@@ -230,9 +253,9 @@ class LUS_Activator {
     private static function create_directories() {
         $upload_dir = wp_upload_dir();
         $dirs = array(
-            $upload_dir['basedir'] . '/lus',
-            $upload_dir['basedir'] . '/lus/' . date('Y'),
-            $upload_dir['basedir'] . '/lus/' . date('Y') . '/' . date('m')
+            LUS_Constants::UPLOAD_DIR,
+            LUS_Constants::UPLOAD_DIR . date('Y'),
+            LUS_Constants::UPLOAD_DIR . date('Y') . '/' . date('m')
         );
 
         foreach ($dirs as $dir) {
@@ -255,11 +278,12 @@ class LUS_Activator {
      */
     private static function set_plugin_options() {
         $options = array(
-            'lus_version' => LUS_VERSION,
+            'lus_version' => VERSION,
             'lus_db_version' => '1.0',
             'lus_installed_at' => current_time('mysql'),
             'lus_enable_tracking' => true,
-            'lus_preserve_data' => true
+            'lus_preserve_data' => true,
+            'lus_user_role_created' => false
         );
 
         foreach ($options as $key => $value) {
@@ -325,5 +349,18 @@ class LUS_Activator {
         global $wpdb;
         $column_check = $wpdb->get_results("SHOW COLUMNS FROM {$table} LIKE '{$column}'");
         return !empty($column_check);
+    }
+
+    /**
+     * Schedule tasks
+     */
+    private static function schedule_tasks() {
+        if (!wp_next_scheduled('lus_daily_cleanup')) {
+            wp_schedule_event(time(), 'daily', 'lus_daily_cleanup');
+        }
+
+        if (!wp_next_scheduled('lus_weekly_stats')) {
+            wp_schedule_event(time(), 'weekly', 'lus_weekly_stats');
+        }
     }
 }
