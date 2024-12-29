@@ -153,7 +153,7 @@ $passages = $this->db->get_all_passages();
                         <button class="button lus-delete-assignment" data-id="<?php echo esc_attr($assignment->id); ?>"
                             data-user="<?php echo esc_attr($assignment->user_name); ?>"
                             data-passage="<?php echo esc_attr($assignment->passage_title); ?>">
-                            <?php _e('Ta bort', 'lus'); ?>
+                            <?php _e('Radera', 'lus'); ?>
                         </button>
                     </td>
                 </tr>

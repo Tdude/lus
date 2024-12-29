@@ -204,10 +204,6 @@ AJAX endpoints follow the pattern:
 
 > If we "save" one in a million, there are still million$ to be saved!
 
-## Reference
-
-Old working plugin implementation files are maintained in a private repo for documentation purposes and possible safety issues since I am not maintaining them. You should not play with possible Tb's of recordable sound files publicly. I figure the current repo should be mostly AI so not "my" code per sé. I'm merely the puzzle facilitator.
-
 ## Testing
 
 - Unit tests for each module
@@ -217,7 +213,7 @@ Old working plugin implementation files are maintained in a private repo for doc
 
 ## Contributors
 
-- Claude AI, Tibor Berki
+- Claude AI with a very limited account, Tibor Berki
 
 ## License
 

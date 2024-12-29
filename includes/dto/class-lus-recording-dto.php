@@ -46,7 +46,7 @@ class LUS_Recording_DTO {
         $dto->id = isset($data['id']) ? (int) $data['id'] : null;
         $dto->user_id = (int) ($data['user_id'] ?? get_current_user_id());
         $dto->passage_id = isset($data['passage_id']) ? (int) $data['passage_id'] : null;
-        $dto->audio_file_path = sanitize_text_field($data['audio_file_path'] ?? '');
+        $dto->audio_file_path = sanitize_text_field(LUS_Constants::UPLOAD_URL ?? '');
         $dto->duration = (int) ($data['duration'] ?? 0);
         $dto->status = sanitize_text_field($data['status'] ?? LUS_Constants::STATUS_PENDING);
         $dto->created_at = $data['created_at'] ?? null;

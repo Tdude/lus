@@ -151,7 +151,6 @@ class LUS_Feature_Flags {
         if (!current_user_can('manage_options')) {
             return;
         }
-
         ?>
 <div class="wrap">
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
@@ -164,10 +163,10 @@ class LUS_Feature_Flags {
 
     <form action="options.php" method="post">
         <?php
-                settings_fields('lus_features');
-                do_settings_sections('lus_features');
-                submit_button(__('Save Features', 'lus'));
-                ?>
+                        settings_fields('lus_features');
+                        do_settings_sections('lus_features');
+                        submit_button(__('Save Features', 'lus'));
+                        ?>
     </form>
 </div>
 <?php
@@ -176,40 +175,10 @@ class LUS_Feature_Flags {
 
 
 // Initialize feature flags
-require_once PLUGIN_DIR . 'includes/class-lus-feature-flags.php';
+require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-feature-flags.php';
 LUS_Feature_Flags::init();
 
 // Helper function to check features
 function lus_is_feature_enabled(string $flag): bool {
     return LUS_Feature_Flags::is_enabled($flag);
-}
-
-// Example usage in plugin code:
-function run_lus() {
-    try {
-        // Use new or old architecture based on feature flag
-        if (lus_is_feature_enabled('use_new_architecture')) {
-            // Initialize new architecture
-            $container = new LUS_Container();
-            $plugin = $container->get('core');
-        } else {
-            // Use legacy initialization
-            $plugin = new LUS();
-        }
-
-        $plugin->run();
-
-    } catch (Exception $e) {
-        // Log error and display admin notice
-        error_log('LUS Plugin Error: ' . $e->getMessage());
-        add_action('admin_notices', function() use ($e) {
-            printf(
-                '<div class="notice notice-error"><p>%s</p></div>',
-                esc_html(sprintf(
-                    __('LUS Plugin Error: %s', 'lus'),
-                    $e->getMessage()
-                ))
-            );
-        });
-    }
 }

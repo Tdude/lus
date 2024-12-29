@@ -180,22 +180,24 @@ class LUS_Statistics {
             $args[] = $passage_id;
         }
 
-        $query = "SELECT
-            q.question_text,
-            p.title as passage_title,
-            COUNT(resp.id) as times_answered,
-            ROUND(
-                (SUM(CASE WHEN resp.is_correct = 1 THEN 1 ELSE 0 END) * 100.0 /
-                NULLIF(COUNT(resp.id), 0)),
-                1
-            ) as correct_rate,
-            ROUND(AVG(NULLIF(resp.score, 0)), 1) as avg_similarity,
-            MIN(resp.created_at) as first_answer,
-            MAX(resp.created_at) as last_answer
+        $query = "
+            SELECT
+                q.question_text,
+                p.title AS passage_title,
+                COUNT(resp.id) AS times_answered,
+                ROUND(
+                    (SUM(CASE WHEN resp.is_correct = 1 THEN 1 ELSE 0 END) * 100.0 /
+                    NULLIF(COUNT(resp.id), 0)),
+                    1
+                ) AS correct_rate,
+                ROUND(AVG(NULLIF(resp.score, 0)), 1) AS avg_similarity,
+                MIN(resp.created_at) AS first_answer,
+                MAX(resp.created_at) AS last_answer
             FROM {$wpdb->prefix}lus_questions q
             JOIN {$wpdb->prefix}lus_passages p ON q.passage_id = p.id
             JOIN {$wpdb->prefix}lus_responses resp ON q.id = resp.question_id
-            JOIN {$wpdb->prefix}lus_recordings r ON resp.recording_id = r.id";
+            JOIN {$wpdb->prefix}lus_recordings r ON resp.recording_id = r.id
+        ";
 
         if (!empty($where)) {
             $query .= " WHERE " . implode(' AND ', $where);
@@ -203,12 +205,14 @@ class LUS_Statistics {
 
         $query .= " GROUP BY q.id, q.question_text, p.title ORDER BY correct_rate DESC";
 
+        // Prepare query with arguments
         if (!empty($args)) {
-            $query = $wpdb->prepare($query, $args);
+            $query = $wpdb->prepare($query, ...$args);
         }
 
         return $wpdb->get_results($query, ARRAY_A);
     }
+
 
     /**
      * Retrieves student progress data including recording details and assessment scores

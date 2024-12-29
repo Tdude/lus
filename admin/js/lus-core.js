@@ -1,4 +1,5 @@
 /**
+ * File: admin/js/lus-core.js
  * let ThisBe: var declarations are hoisted to the top of their scope and are initialized with undefined.
  * This means var LUS will not throw an error when LUS is accessed before its declaration.
  */
@@ -10,16 +11,13 @@ LUS.UI = LUS.UI || {};
 // I will rather have them here.
 
 const LUS_Config = {
-  // API endpoints
   ENDPOINTS: {
-    SAVE_PASSAGE: "lus_admin_passage_save",
-    DELETE_RECORDING: "lus_admin_recording_delete",
+    SAVE_PASSAGE: LUS_Constants.AJAX_SAVE_PASSAGE,
+    DELETE_RECORDING: LUS_Constants.AJAX_DELETE_RECORDING,
   },
-
-  // Status codes
   STATUS: {
-    PENDING: "pending",
-    ASSESSED: "assessed",
+    PENDING: LUS_Constants.STATUS_PENDING,
+    ASSESSED: LUS_Constants.STATUS_ASSESSED,
   },
 
   // UI settings

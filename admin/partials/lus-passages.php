@@ -212,12 +212,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lus_passage_nonce']))
                 </tr>
                 <tr>
                     <th scope="row">
-                        <label for="time_limit"><?php _e('Time Limit (seconds)', 'lus'); ?></label>
+                        <label for="time_limit"><?php _e('Tidsgräns (sekunder)', 'lus'); ?></label>
                     </th>
                     <td>
                         <input type="number" id="time_limit" name="time_limit" value="180" min="30" step="1">
                         <p class="description">
-                            <?php _e('Tidsgräns för inspelning i sekunder.', 'lus'); ?>
+                            <?php _e('Tidsgräns för inläsning i sekunder.', 'lus'); ?>
                         </p>
                     </td>
                 </tr>

@@ -1,4 +1,6 @@
-// lus-ui.js
+/**
+ * File: admin/js/lus-ui.js
+ */
 
 LUS.UI = {
   LoadingState: {

@@ -14,40 +14,92 @@ class LUS_Activator {
      * Create the necessary database tables and plugin setup.
      */
     public static function activate() {
-        // Create upload directory if it doesn't exist
-        if (!file_exists( LUS_Constants::UPLOAD_DIR )) {
-            if (!wp_mkdir_p( LUS_Constants::UPLOAD_DIR )) {
-                wp_die(__('Kunde inte skapa uppladdningskatalogen.', 'lus'));
-            }
+        // 1. Check capabilities
+        if (!current_user_can('activate_plugins')) {
+            wp_die(__('You do not have sufficient permissions to activate plugins', 'lus'));
         }
-        // Set directory permissions
-        chmod(LUS_Constants::UPLOAD_DIR, 0755);
 
+        // 2. Check core requirements first
         self::check_requirements();
+
+        // 3. Set up directories
+        self::create_directories();
+
+        // 4. Database operations
         self::create_database_tables();
         self::upgrade_database_schema();
-        self::create_directories();
+
+        // 5. Final setup
         self::set_plugin_options();
-        self::migrate_data_if_needed();
+        //self::migrate_data_if_needed(); // Removed this for brevity
         self::schedule_tasks();
     }
 
-    /**
-     * Verify requirements
-     */
     private static function check_requirements() {
         global $wpdb;
 
-        // Check MySQL version
-        $mysql_version = $wpdb->db_version();
-        if (version_compare($mysql_version, '5.6', '<')) {
-            wp_die(__('LUS kräver MySQL 5.6 eller högre.', 'lus'));
+        // Core requirement checks
+        if (version_compare(get_bloginfo('version'), LUS_Constants::MIN_WP_VERSION, '<')) {
+            wp_die(sprintf(__('LUS requires WordPress version %s or higher.', 'lus'),
+                   LUS_Constants::MIN_WP_VERSION));
+        }
+        // PHP
+        if (version_compare(PHP_VERSION, LUS_Constants::MIN_PHP_VERSION, '<')) {
+            wp_die(sprintf(__('LUS requires PHP version %s or higher.', 'lus'),
+                   LUS_Constants::MIN_PHP_VERSION));
         }
 
-        // Check write permissions
+        // Database checks
+        $mysql_version = $wpdb->db_version();
+        if (version_compare($mysql_version, '5.6', '<')) {
+            wp_die(__('LUS requires MySQL 5.6 or higher.', 'lus'));
+        }
+
+        // Check if uploads directory is writable
         $upload_dir = wp_upload_dir();
-        if (!wp_is_writable( LUS_Constants::UPLOAD_DIR )) {
-            wp_die(__('LUS kräver skrivrättigheter i uppladdningskatalogen.', 'lus'));
+        if (!wp_is_writable($upload_dir['basedir'])) {
+            wp_die(sprintf(__('Stupid LUSWordPress uploads directory is not writable: %s', 'lus'), $upload_dir['basedir']));
+        }
+    }
+
+    private static function create_directories() {
+        // First ensure WordPress upload directory exists
+        $wp_upload_dir = wp_upload_dir();
+        if ($wp_upload_dir['error']) {
+            wp_die($wp_upload_dir['error']);
+        }
+
+        // Create WordPress year/month directories
+        $year_dir = $wp_upload_dir['basedir'] . '/' . date('Y');
+        $month_dir = $year_dir . '/' . date('m');
+
+        if (!file_exists($year_dir)) {
+            if (!wp_mkdir_p($year_dir)) {
+                wp_die(sprintf(__('Could not create year directory: %s', 'lus'), $year_dir));
+            }
+        }
+
+        if (!file_exists($month_dir)) {
+            if (!wp_mkdir_p($month_dir)) {
+                wp_die(sprintf(__('Could not create month directory: %s', 'lus'), $month_dir));
+            }
+        }
+
+    // Use direct path construction since constants may not be available during activation
+    $lus_base_dir = $wp_upload_dir['basedir'] . '/lus';
+
+    $dirs = [
+        $lus_base_dir,
+        $lus_base_dir . '/temp'
+    ];
+
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                if (!wp_mkdir_p($dir)) {
+                    wp_die(sprintf(__('Could not create directory: %s', 'lus'), $dir));
+                }
+                chmod($dir, 0755);
+            }
         }
     }
 
@@ -184,6 +236,7 @@ class LUS_Activator {
             ) {$charset_collate}",
 
             // Admin Activity Tracking
+            /*
             'lus_admin_interactions' => "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}lus_admin_interactions (
                 id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
                 user_id bigint(20) UNSIGNED NOT NULL,
@@ -198,6 +251,25 @@ class LUS_Activator {
                 KEY idx_page_action (page, action),
                 KEY idx_created_at (created_at),
                 CONSTRAINT fk_interaction_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES {$wpdb->users} (ID)
+                    ON DELETE CASCADE
+            ) {$charset_collate}"
+            */
+            'lus_admin_interactions' => "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}lus_admin_interactions (
+                id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+                user_id bigint(20) UNSIGNED NOT NULL,
+                page varchar(50) NOT NULL,
+                action varchar(50) NOT NULL,
+                clicks int DEFAULT 0,
+                active_time int DEFAULT 0,
+                idle_time int DEFAULT 0,
+                created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY user_id (user_id),
+                KEY idx_page_action (page, action),
+                KEY idx_created_at (created_at),
+                CONSTRAINT fk_lus_interaction_user
                     FOREIGN KEY (user_id)
                     REFERENCES {$wpdb->users} (ID)
                     ON DELETE CASCADE
@@ -248,37 +320,11 @@ class LUS_Activator {
     }
 
     /**
-     * Create required directories for audio uploads
-     */
-    private static function create_directories() {
-        $upload_dir = wp_upload_dir();
-        $dirs = array(
-            LUS_Constants::UPLOAD_DIR,
-            LUS_Constants::UPLOAD_DIR . date('Y'),
-            LUS_Constants::UPLOAD_DIR . date('Y') . '/' . date('m')
-        );
-
-        foreach ($dirs as $dir) {
-            if (!file_exists($dir)) {
-                if (!wp_mkdir_p($dir)) {
-                    error_log("LUS: Failed to create directory: {$dir}");
-                } else {
-                    // Create .htaccess to prevent directory listing
-                    $htaccess = $dir . '/.htaccess';
-                    if (!file_exists($htaccess)) {
-                        file_put_contents($htaccess, "Options -Indexes\n");
-                    }
-                }
-            }
-        }
-    }
-
-    /**
      * Set initial plugin options
      */
     private static function set_plugin_options() {
         $options = array(
-            'lus_version' => VERSION,
+            'lus_version' => LUS_Constants::PLUGIN_VERSION,
             'lus_db_version' => '1.0',
             'lus_installed_at' => current_time('mysql'),
             'lus_enable_tracking' => true,
@@ -288,57 +334,6 @@ class LUS_Activator {
 
         foreach ($options as $key => $value) {
             update_option($key, $value, 'no');
-        }
-    }
-
-    /**
-     * Migrate data from old ra_ tables if they exist
-     */
-    private static function migrate_data_if_needed() {
-        global $wpdb;
-
-        // Check if old tables exist and migration is needed
-        $old_tables = $wpdb->get_results("SHOW TABLES LIKE '{$wpdb->prefix}ra_%'");
-        if (empty($old_tables) || get_option('lus_data_migrated')) {
-            return;
-        }
-
-        // Start transaction for data migration
-        $wpdb->query('START TRANSACTION');
-
-        try {
-            $table_mappings = [
-                'ra_passages' => 'lus_passages',
-                'ra_recordings' => 'lus_recordings',
-                'ra_questions' => 'lus_questions',
-                'ra_responses' => 'lus_responses',
-                'ra_assessments' => 'lus_assessments',
-                'ra_assignments' => 'lus_assignments',
-                'ra_admin_interactions' => 'lus_admin_interactions'
-            ];
-
-            foreach ($table_mappings as $old_table => $new_table) {
-                $old_table = $wpdb->prefix . $old_table;
-                $new_table = $wpdb->prefix . $new_table;
-
-                // Check if old table exists
-                $exists = $wpdb->get_var("SHOW TABLES LIKE '$old_table'");
-                if ($exists) {
-                    // Copy data
-                    $wpdb->query("INSERT INTO $new_table SELECT * FROM $old_table");
-                    if ($wpdb->last_error) {
-                        throw new Exception("Failed to migrate data from $old_table: " . $wpdb->last_error);
-                    }
-                }
-            }
-
-            // Mark migration as complete
-            update_option('lus_data_migrated', true);
-            $wpdb->query('COMMIT');
-
-        } catch (Exception $e) {
-            $wpdb->query('ROLLBACK');
-            error_log('LUS: Data migration failed: ' . $e->getMessage());
         }
     }
 

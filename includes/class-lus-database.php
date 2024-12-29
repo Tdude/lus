@@ -63,11 +63,11 @@ class LUS_Database {
         'get_recordings' => "
             SELECT r.*, u.display_name, p.title as passage_title
             FROM {prefix}recordings r
-            JOIN {wp_prefix}users u ON r.user_id = u.ID
+            INNER JOIN {wp_prefix}users u ON r.user_id = u.ID
             LEFT JOIN {prefix}passages p ON r.passage_id = p.id
             WHERE 1=1
-            {where}
-            ORDER BY r.{orderby} {order}
+            AND r.status = 'active' -- Example filter
+            ORDER BY r.created_at DESC
             LIMIT %d OFFSET %d",
 
         'create_recording' => "
@@ -83,6 +83,20 @@ class LUS_Database {
             WHERE id = %d",
 
         // Questions
+        'create_question' => "
+            INSERT INTO {prefix}questions
+            (passage_id, question_text, correct_answer, weight, active, created_at)
+            VALUES (%d, %s, %s, %f, 1, %s)",
+
+        'update_question' => "
+            UPDATE {prefix}questions
+            SET question_text = %s,
+                correct_answer = %s,
+                weight = %f,
+                active = 1,
+                updated_at = %s
+            WHERE id = %d",
+
         'get_question' => "
             SELECT q.*, p.title as passage_title
             FROM {prefix}questions q
@@ -640,6 +654,30 @@ class LUS_Database {
     }
 
     /**
+    * Get orphaned/unassigned recordings with user details and optional pagination
+    *
+    * Returns recordings that have no passage_id (0 or NULL) along with user display names.
+    * Results are ordered by creation date, newest first.
+    *
+    * @param int $limit Maximum number of records to return
+    * @param int $offset Number of records to skip (for pagination)
+    * @return array Array of recording objects with user details
+    */
+    public function get_orphaned_recordings($limit = 20, $offset = 0) {
+        return $this->db->get_results($this->db->prepare(
+            "SELECT r.*, u.display_name
+             FROM {$this->db->prefix}" . LUS_Constants::TABLE_RECORDINGS . " r
+             JOIN {$this->db->users} u ON r.user_id = u.ID
+             WHERE r.passage_id = 0 OR r.passage_id IS NULL
+             ORDER BY r.created_at DESC
+             LIMIT %d OFFSET %d",
+            $limit,
+            $offset
+        ));
+    }
+
+
+    /**
      * Get assessment details
      *
      * @param int $assessment_id Assessment ID
@@ -712,6 +750,70 @@ class LUS_Database {
                 return new WP_Error('assessment_error', $e->getMessage());
             }
         });
+    }
+
+
+    /**
+     * Create a new question
+     *
+     * @param array $question_data Associative array of question data
+     * @return int|WP_Error Inserted question ID on success, or WP_Error on failure
+     */
+    public function create_question(array $question_data) {
+        $query = $this->prepare_query(
+            self::SQL['create_question'],
+            [
+                $question_data['passage_id'],
+                $question_data['question_text'],
+                $question_data['correct_answer'],
+                $question_data['weight'],
+                current_time('mysql')
+            ]
+        );
+
+        $result = $this->db->query($query);
+
+        if ($result === false) {
+            return new WP_Error(
+                'db_insert_error',
+                __('Failed to insert question into the database.', 'lus'),
+                $this->db->last_error
+            );
+        }
+
+        return $this->db->insert_id;
+    }
+
+    /**
+     * Update an existing question
+     *
+     * @param int $question_id Question ID
+     * @param array $question_data Associative array of question data
+     * @return int|WP_Error Number of rows updated, or WP_Error on failure
+     */
+    public function update_question(int $question_id, array $question_data) {
+        $query = $this->prepare_query(
+            self::SQL['update_question'],
+            [
+                $question_data['question_text'],
+                $question_data['correct_answer'],
+                $question_data['weight'],
+                current_time('mysql'),
+                $question_id
+            ]
+        );
+
+        $result = $this->db->query($query);
+
+        if ($result === false) {
+            return new WP_Error(
+                'db_update_error',
+                __('Failed to update question in the database.', 'lus'),
+                $this->db->last_error
+            );
+        }
+
+        return $result;
     }
 
     /**

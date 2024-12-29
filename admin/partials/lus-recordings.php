@@ -61,8 +61,8 @@ $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
 $offset = ($current_page - 1) * $per_page;
 
 // Get unassigned recordings
-$unassigned_recordings = $this->db->get_unassigned_recordings($per_page, $offset);
-$total_unassigned = $this->db->get_total_unassigned_recordings();
+$unassigned_recordings = $this->db->get_orphaned_recordings($per_page, $offset);
+$total_unassigned = $this->db->get_total_orphaned_recordings();
 $total_pages = ceil($total_unassigned / $per_page);
 
 // Get all passages for assignment dropdown

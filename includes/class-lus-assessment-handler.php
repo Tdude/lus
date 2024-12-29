@@ -21,12 +21,12 @@ class LUS_Assessment_Handler {
 
     /** @var array */
     private $weights = [
-        'response' => 0.7,  // Text response weight
-        'audio' => 0.3      // Audio evaluation weight
+        'response' => LUS_Constants::TEXT_RESPONSE_WEIGHT,
+        'audio' => LUS_Constants::AUDIO_EVALUATION_WEIGHT
     ];
 
     /** @var float */
-    private const MIN_CONFIDENCE_THRESHOLD = 0.8;
+    private const MIN_CONFIDENCE_THRESHOLD = LUS_Constants::MIN_CONFIDENCE_THRESHOLD; // Between 0 and 1
 
     /**
      * Constructor
@@ -202,7 +202,7 @@ class LUS_Assessment_Handler {
                     // Update recording status if confidence meets threshold
                     if ($confidence >= self::MIN_CONFIDENCE_THRESHOLD) {
                         $this->db->update_recording($recording_id, [
-                            'status' => LUS_Constants::STATUS_ASSESSED
+                            'status' => LUS_Constants::STATUS_ASSESSED // 'assessed'
                         ]);
                     }
 

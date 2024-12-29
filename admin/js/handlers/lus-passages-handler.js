@@ -84,29 +84,39 @@ LUS.Handlers.Passages = {
   },
 
   handleDelete(passageId, passageTitle, $button) {
-    const confirmMessage = LUS.Strings.confirmDeletePassage.replace(
-      "%s",
-      passageTitle
-    );
-
-    if (!confirm(confirmMessage)) {
+    if (
+      !confirm(LUS_Strings.confirmDeletePassage.replace("%s", passageTitle))
+    ) {
       return;
     }
 
-    LUS.UI.LoadingState.show($button, LUS.Strings.deleting, {
-      spinnerPosition: "replace",
-    });
+    // Show loading state
+    LUS.UI.LoadingState.show($button, LUS_Strings.deleting);
 
-    LUS.Data.request("delete_passage", {
-      passage_id: passageId,
+    // Make AJAX request
+    fetch(ajaxurl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        action: "delete_passage",
+        passage_id: passageId,
+        nonce: lusStrings.nonce,
+      }),
     })
+      .then((response) => response.json())
       .then((response) => {
+        if (!response.success) {
+          throw new Error(response.data.message);
+        }
+        // Remove the row from the table
         const $row = $button.closest("tr");
         $row.fadeOut(400, function () {
           $row.remove();
-          LUS.UI.Notices.show("success", response.message);
+          LUS.UI.LoadingState.success($button, response.data.message);
 
-          // Check if no passages left
+          // Reload if no rows left
           if ($(".lus-passages-list tbody tr").length === 0) {
             location.reload();
           }

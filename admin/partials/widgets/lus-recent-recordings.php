@@ -107,10 +107,10 @@ $recent_recordings = $this->db->get_recordings([
     </tbody>
 </table>
 
-<?php include LUS_Constants::PLUGIN_DIR . 'lus-pagination.php'; ?>
+<?php include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-pagination.php'; ?>
 <?php else: ?>
 <p><?php _e('Inga inspelningar registrerade än.', 'lus'); ?></p>
 <?php endif; ?>
 
 <!-- Assessment Modal -->
-<?php include LUS_Constants::PLUGIN_DIR . 'lus-assessment-modal.php'; ?>
+<?php include LUS_Constants::PLUGIN_DIR . 'admin/partials/widgets/lus-assessment-modal.php'; ?>

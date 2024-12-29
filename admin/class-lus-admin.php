@@ -1,112 +1,52 @@
 <?php
 /**
+ * File: class-lus-admin.php
  * The admin-specific functionality of the plugin.
- *
  * @package    LUS
  * @subpackage LUS/admin
  */
 
-class LUS_Admin {
-    /** @var string Plugin name */
+ class LUS_Admin {
     private $plugin_name;
-
-    /** @var string Plugin version */
     private $version;
-
-    /** @var LUS_Database Database instance */
     private $db;
-
-    /** @var LUS_Assessment_Handler Assessment handler instance */
-    private $assessment_handler;
-
-    /** @var array UI strings */
     private $strings = [];
-
-    /** @var array Page hooks */
     private $page_hooks = [];
-
-    /** @var array Script dependencies by page */
     private const SCRIPT_DEPS = [
-        'lus_page_lus-passages' => [
-            'core' => ['jquery'],
-            'ui' => ['core'],
-            'passages' => ['core', 'ui'],
-        ],
-        'lus_page_lus-questions' => [
-            'core' => ['jquery'],
-            'ui' => ['core'],
-            'questions' => ['core', 'ui'],
-        ],
-        'lus_page_lus-recordings' => [
-            'core' => ['jquery'],
-            'ui' => ['core'],
-            'recordings' => ['core', 'ui'],
-        ],
-        'lus_page_lus-results' => [
-            'core' => ['jquery'],
-            'ui' => ['core'],
-            'results' => ['core', 'ui'],
-            'chart' => ['core', 'ui', 'chartjs'],
-        ],
+        'toplevel_page_lus' => ['core' => ['jquery'], 'ui' => ['core'], 'passages' => ['core', 'ui']],
+        'lus-installningar_page_lus-passages' => ['core' => ['jquery'], 'ui' => ['core'], 'passages' => ['core', 'ui']],
+        'lus-installningar_page_lus-questions' => ['core' => ['jquery'], 'ui' => ['core'], 'questions' => ['core', 'ui']],
+        'lus-installningar_page_lus-recordings' => ['core' => ['jquery'], 'ui' => ['core'], 'recordings' => ['core', 'ui']],
+        'lus-installningar_page_lus-results' => ['core' => ['jquery'], 'ui' => ['core'], 'results' => ['core', 'ui'], 'chart' => ['core', 'ui', 'chartjs']],
     ];
-
-    /** @var array External scripts */
     private const EXTERNAL_SCRIPTS = [
-        'chartjs' => [
-            'url' => 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js',
-            'version' => '3.9.1',
-            'pages' => ['lus_page_lus-results'],
-        ],
+        'chartjs' => ['url' => 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js', 'version' => '3.9.1', 'pages' => ['lus-installningar_page_lus-results']],
     ];
 
-    /**
-     * Constructor
-     *
-     * @param string        $plugin_name Plugin name
-     * @param string        $version     Plugin version
-     * @param LUS_Database $db          Database instance
-     */
-    public function __construct(string $plugin_name, string $version, LUS_Database $db) {
-        $this->plugin_name = $plugin_name;
-        $this->version = $version;
-        $this->db = $db;
-        $this->assessment_handler = new LUS_Assessment_Handler($db);
 
-        // Initialize components
+    public function __construct(LUS_Database $db) {
+        $this->plugin_name = LUS_Constants::PLUGIN_NAME;
+        $this->version = LUS_Constants::PLUGIN_VERSION;
+        $this->db = $db;
         $this->init_hooks();
-        $this->init_strings();
+        $this->load_strings();
     }
 
-    /**
-     * Initialize hooks
-     */
     private function init_hooks(): void {
-        // Asset handling
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_styles']);
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_scripts']);
-
-        // Menu and settings
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('admin_menu', [$this, 'add_menu_pages']);
         add_action('admin_init', [$this, 'register_settings']);
-        add_filter('plugin_action_links_' . PLUGIN_NAME, [$this, 'add_settings_link']);
-
-        // AJAX handlers
+        add_filter('plugin_action_links_' . LUS_Constants::PLUGIN_NAME, [$this, 'add_settings_link']);
         $this->register_ajax_handlers();
     }
 
-    /**
-     * Initialize localized strings
-     */
-    private function init_strings(): void {
-        require PLUGIN_DIR . 'includes/config/admin-strings.php';
-        $this->strings = apply_filters('lus_admin_strings', $strings);
+    private function load_strings(): void {
+        $strings_path = LUS_Constants::PLUGIN_DIR . 'includes/config/admin-strings.php';
+        $this->strings = file_exists($strings_path) ? require $strings_path : [];
     }
 
-    /**
-     * Register all AJAX handlers
-     */
     private function register_ajax_handlers(): void {
-        $handlers = [
+        foreach ([
             'get_passage',
             'get_passages',
             'delete_passage',
@@ -116,172 +56,61 @@ class LUS_Admin {
             'delete_assignment',
             'save_assessment',
             'delete_recording',
-            'bulk_assign_recordings',
-        ];
-
-        foreach ($handlers as $handler) {
-            add_action(
-                'wp_ajax_lus_admin_' . $handler,
-                [$this, 'ajax_' . $handler]
-            );
+            'bulk_assign_recordings'
+            ] as $handler) {
+            add_action('wp_ajax_lus_admin_' . $handler, [$this, 'ajax_' . $handler]);
         }
     }
 
-    /**
-     * Enqueue admin styles
-     */
-    public function enqueue_styles(): void {
-        wp_enqueue_style(
-            $this->plugin_name,
-            PLUGIN_URL . 'admin/css/lus-admin.css',
-            [],
-            $this->version,
-            'all'
-        );
-    }
-
-    /**
-     * Enqueue admin scripts
-     */
-    public function enqueue_scripts(): void {
+    public function enqueue_assets(): void {
         $screen = get_current_screen();
-        if (!$screen) {
-            return;
-        }
-
-        // Core and UI Scripts
-        $this->enqueue_core_scripts($screen->id);
-
-        // Handler Scripts
-        $this->enqueue_handler_scripts($screen->id);
-
-        // External Scripts
-        $this->enqueue_external_scripts($screen->id);
-
-        // Localize strings and data
-        wp_localize_script(
-            $this->plugin_name,
-            'lusStrings',
-            $this->get_localized_strings()
-        );
+        if (!$screen) return;
+        echo 'Current Screen ID: ' . $screen->id . '<br>';
+        $this->enqueue_styles();
+        $this->enqueue_scripts($screen->id);
     }
 
-    /**
-     * Enqueue core scripts
-     *
-     * @param string $screen_id Current screen ID
-     */
-    private function enqueue_core_scripts(string $screen_id): void {
-        if (!isset(self::SCRIPT_DEPS[$screen_id])) {
-            return;
-        }
-
-        foreach (['core', 'ui'] as $script) {
-            if (isset(self::SCRIPT_DEPS[$screen_id][$script])) {
-                $this->enqueue_script(
-                    $script,
-                    "admin/js/lus-{$script}.js",
-                    self::SCRIPT_DEPS[$screen_id][$script]
-                );
-            }
-        }
+    public function enqueue_styles(): void {
+        wp_enqueue_style($this->plugin_name, LUS_Constants::PLUGIN_URL . 'admin/css/lus-admin.css', [], $this->version, 'all');
     }
 
-    /**
-     * Enqueue handler scripts
-     *
-     * @param string $screen_id Current screen ID
-     */
-    private function enqueue_handler_scripts(string $screen_id): void {
-        if (!isset(self::SCRIPT_DEPS[$screen_id])) {
-            return;
-        }
+    public function enqueue_scripts(string $screen_id): void {
+        if (!isset(self::SCRIPT_DEPS[$screen_id])) return;
 
-        foreach (self::SCRIPT_DEPS[$screen_id] as $handler => $deps) {
-            if ($handler !== 'core' && $handler !== 'ui') {
-                $this->enqueue_script(
-                    $handler,
-                    "admin/js/handlers/lus-{$handler}-handler.js",
-                    $deps
-                );
-            }
+        // Enqueue core, UI, and handler scripts
+        foreach (self::SCRIPT_DEPS[$screen_id] as $type => $deps) {
+            $this->enqueue_script($type, $type === 'core' || $type === 'ui' ? "admin/js/lus-{$type}.js" : "admin/js/handlers/lus-{$type}-handler.js", $deps);
         }
-    }
-
-    /**
-     * Enqueue external scripts
-     *
-     * @param string $screen_id Current screen ID
-     */
-    private function enqueue_external_scripts(string $screen_id): void {
+        // Enqueue external scripts
         foreach (self::EXTERNAL_SCRIPTS as $handle => $script) {
             if (in_array($screen_id, $script['pages'])) {
-                wp_enqueue_script(
-                    $handle,
-                    $script['url'],
-                    [],
-                    $script['version'],
-                    true
-                );
+                wp_enqueue_script($handle, $script['url'], [], $script['version'], true);
             }
         }
+        // Localize script data
+        wp_localize_script($this->plugin_name, 'lusStrings', [
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => LUS_Constants::NONCE_ADMIN,
+        ]);
     }
 
-    /**
-     * Helper to enqueue a script
-     *
-     * @param string $handle Handle identifier
-     * @param string $path   Script path relative to plugin folder
-     * @param array  $deps   Dependencies
-     */
-    private function enqueue_script(string $handle, string $path, array $deps = []): void {
-        $script_path = PLUGIN_DIR . $path;
-        $script_url = PLUGIN_URL . $path;
 
-        $version = file_exists($script_path) ?
-            filemtime($script_path) :
-            $this->version;
-
-        $mapped_deps = array_map(
-            function ($dep) {
-                return $dep === 'core' || $dep === 'ui' ?
-                    "{$this->plugin_name}-{$dep}" :
-                    $dep;
-            },
-            $deps
-        );
-
-        wp_enqueue_script(
-            "{$this->plugin_name}-{$handle}",
-            $script_url,
-            $mapped_deps,
-            $version,
-            true
-        );
+    public function enqueue_script(string $handle, string $path, array $deps): void {
+        $url = LUS_Constants::PLUGIN_URL . $path;
+        $version = file_exists(LUS_Constants::PLUGIN_DIR . $path) ? filemtime(LUS_Constants::PLUGIN_DIR . $path) : $this->version;
+        // Fix dependency mapping for native WP scripts like 'jquery'
+        $mapped_deps = array_map(fn($dep) => in_array($dep, ['core', 'ui'])
+            ? ($dep === 'core' ? 'jquery' : "{$this->plugin_name}-{$dep}")
+            : $dep, $deps);
+        wp_enqueue_script("{$this->plugin_name}-{$handle}", $url, $mapped_deps, $version, true);
+        error_log('Enqueuing script: ' . "{$this->plugin_name}-{$handle} with deps: " . implode(',', $mapped_deps));
     }
 
-    /**
-     * Get localized strings
-     *
-     * @return array Localized strings
-     */
-    private function get_localized_strings(): array {
-        return array_merge(
-            $this->strings,
-            [
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'nonce' => NONCE_ADMIN
-            ]
-        );
-    }
-
-    /**
-     * Add admin menu pages
-     */
     public function add_menu_pages(): void {
+        // Add main menu page
         $this->page_hooks['main'] = add_menu_page(
             __('Läsuppskattning', 'lus'),
-            __('LUStigkurre', 'lus'),
+            __('LUS Inställningar', 'lus'),
             'manage_options',
             'lus',
             [$this, 'render_dashboard_page'],
@@ -289,12 +118,14 @@ class LUS_Admin {
             6
         );
 
+        // Add submenu pages
         $subpages = [
             'passages' => __('Texter', 'lus'),
             'questions' => __('Frågor', 'lus'),
             'assignments' => __('Tilldelningar', 'lus'),
             'results' => __('Resultat', 'lus'),
-            'recordings' => __('Inspelningar', 'lus')
+            'recordings' => __('Inspelningar', 'lus'),
+            'settings' => __('Inställningar', 'lus')
         ];
 
         foreach ($subpages as $slug => $title) {
@@ -307,8 +138,7 @@ class LUS_Admin {
                 [$this, "render_{$slug}_page"]
             );
         }
-
-        // Add repair tool if needed
+        // Do not show if no bårken record(ing)s
         if ($this->db->get_total_orphaned_recordings() > 0) {
             $this->page_hooks['repair'] = add_submenu_page(
                 'lus',
@@ -321,59 +151,28 @@ class LUS_Admin {
         }
     }
 
-    /**
-     * Register plugin settings
-     */
     public function register_settings(): void {
-        // Activity tracking settings
-        register_setting('lus', 'lus_enable_tracking', [
-            'type' => 'boolean',
-            'default' => true
-        ]);
+        $settings = [
+            ['lus_enable_tracking', __('Aktivera aktivitetsspårning', 'lus'), 'lus_settings_group', true],
+            ['lus_difficulty_level', __('Aktivera svårighetsgrad', 'lus'), 'lus_settings_group', false],
+            ['lus_enable_ai_evaluation', __('Aktivera AI-utvärdering', 'lus'), 'lus_settings_group', false],
+            ['lus_confidence_threshold', __('Vikta AI mot manuell LUSning', 'lus'), 'lus_settings_group', false],
+        ];
 
-        add_settings_section(
-            'lus_tracking_settings',
-            __('Aktivitetsspårning', 'lus'),
-            [$this, 'render_tracking_section'],
-            'lus'
-        );
-
-        add_settings_field(
-            'lus_enable_tracking',
-            __('Aktivera aktivitetsspårning', 'lus'),
-            [$this, 'render_tracking_field'],
-            'lus',
-            'lus_tracking_settings'
-        );
-
-        // AI evaluation settings
-        register_setting('lus', 'lus_enable_ai_evaluation', [
-            'type' => 'boolean',
-            'default' => false
-        ]);
-
-        add_settings_section(
-            'lus_ai_settings',
-            __('AI-utvärdering', 'lus'),
-            [$this, 'render_ai_section'],
-            'lus'
-        );
+        foreach ($settings as [$name, $title, $section, $default]) {
+            register_setting('lus', $name, ['type' => 'boolean', 'default' => $default]);
+            add_settings_field($name, $title, [$this, 'render_settings_page'], 'lus', $section);
+        }
     }
 
-    /**
-     * Add settings link to plugin page
-     *
-     * @param array $links Existing plugin links
-     * @return array Modified plugin links
-     */
-    public function add_settings_link(array $links): array {
-        $settings_link = sprintf(
-            '<a href="%s">%s</a>',
-            admin_url('admin.php?page=lus'),
-            __('Inställningar', 'lus')
-        );
-        array_unshift($links, $settings_link);
+    public function add_settings_link($links): array {
+        $settings_link = '<a href="options-general.php?page=lus">' . __('Settings', 'lus') . '</a>';
+        array_push($links, $settings_link);
         return $links;
+    }
+
+    public function render_settings_page(): void {
+        include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-settings.php';
     }
 
     /**
@@ -424,7 +223,7 @@ class LUS_Admin {
         }
 
         // Verify template exists
-        $template = PLUGIN_DIR . 'admin/partials/lus-dashboard.php';
+        $template = LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-dashboard.php';
         if (!file_exists($template)) {
             wp_die(__('Template file missing', 'lus'));
         }
@@ -491,7 +290,7 @@ class LUS_Admin {
             }
         }
 
-        include PLUGIN_DIR . 'admin/partials/lus-passages.php';
+        include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-passages.php';
     }
 
     /**
@@ -532,7 +331,7 @@ class LUS_Admin {
         // Get questions for selected passage
         $questions = $selected_passage_id ? $this->db->get_questions_for_passage($selected_passage_id) : [];
 
-        include PLUGIN_DIR . 'admin/partials/lus-questions.php';
+        include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-questions.php';
     }
 
     /**
@@ -567,7 +366,7 @@ class LUS_Admin {
         $users = get_users(['role__not_in' => ['administrator']]);
         $passages = $this->db->get_all_passages();
 
-        include PLUGIN_DIR . 'admin/partials/lus-assignments.php';
+        include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-assignments.php';
     }
 
     /**
@@ -598,8 +397,8 @@ class LUS_Admin {
                 if ($success_count > 0) {
                     $success_message = sprintf(
                         _n(
-                            '%d recording updated.',
-                            '%d recordings updated.',
+                            '%d inspelning uppdaterad.',
+                            '%d inspelningar uppdaterade.',
                             $success_count,
                             'lus'
                         ),
@@ -610,8 +409,8 @@ class LUS_Admin {
                 if ($error_count > 0) {
                     $error_message = sprintf(
                         _n(
-                            '%d recording could not be updated.',
-                            '%d recordings could not be updated.',
+                            '%d inspelningen kunde inte uppdateras.',
+                            '%d inspelningarna kunde inte uppdateras.',
                             $error_count,
                             'lus'
                         ),
@@ -627,14 +426,14 @@ class LUS_Admin {
         $offset = ($current_page - 1) * $per_page;
 
         // Get recordings
-        $recordings = $this->db->get_unassigned_recordings($per_page, $offset);
-        $total_unassigned = $this->db->get_total_unassigned_recordings();
+        $recordings = $this->db->get_orphaned_recordings($per_page, $offset);
+        $total_unassigned = $this->db->get_total_orphaned_recordings();
         $total_pages = ceil($total_unassigned / $per_page);
 
         // Get passages for assignment dropdown
         $passages = $this->db->get_all_passages(['orderby' => 'title', 'order' => 'ASC']);
 
-        include PLUGIN_DIR . 'admin/partials/lus-recordings.php';
+        include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-recordings.php';
     }
 
     /**
@@ -657,14 +456,14 @@ class LUS_Admin {
         $passage_stats = $stats->get_passage_statistics($passage_id, $date_limit);
         $question_stats = $stats->get_question_statistics($passage_id, $date_limit);
 
-        include PLUGIN_DIR . 'admin/partials/lus-results.php';
+        include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-results.php';
     }
 
     /**
      * Render repair page
      */
     public function render_repair_page(): void {
-        include PLUGIN_DIR . 'admin/partials/lus-repair.php';
+        include LUS_Constants::PLUGIN_DIR . 'admin/partials/lus-repair.php';
     }
 
 
@@ -677,14 +476,14 @@ class LUS_Admin {
             $this->verify_ajax_request();
 
             if (!isset($_POST['passage_id'])) {
-                throw new Exception(__('Passage ID required', 'lus'));
+                throw new Exception(__('Passagens ID nödvändigt.', 'lus'));
             }
 
             $passage_id = intval($_POST['passage_id']);
             $passage = $this->db->get_passage($passage_id);
 
             if (!$passage) {
-                throw new Exception(__('Passage not found', 'lus'));
+                throw new Exception(__('Textpassagen hittades inte.', 'lus'));
             }
 
             $this->send_json_response($passage);
@@ -704,7 +503,7 @@ class LUS_Admin {
             $passages = $this->db->get_all_passages();
 
             if (empty($passages)) {
-                throw new Exception(__('No passages found', 'lus'));
+                throw new Exception(__('Ingen textpassage hittad.', 'lus'));
             }
 
             $this->send_json_response($passages);
@@ -722,7 +521,7 @@ class LUS_Admin {
             $this->verify_ajax_request();
 
             if (!isset($_POST['passage_id'])) {
-                throw new Exception(__('Passage ID required', 'lus'));
+                throw new Exception(__('Passagens ID nödvändigt.', 'lus'));
             }
 
             $passage_id = intval($_POST['passage_id']);
@@ -733,7 +532,7 @@ class LUS_Admin {
             }
 
             $this->send_json_response([
-                'message' => __('Passage deleted successfully', 'lus')
+                'message' => __('Textpassagen är raderad.', 'lus')
             ]);
 
         } catch (Exception $e) {
@@ -749,7 +548,7 @@ class LUS_Admin {
             $this->verify_ajax_request();
 
             if (!isset($_POST['recording_id'])) {
-                throw new Exception(__('Recording ID required', 'lus'));
+                throw new Exception(__('Inspelningens ID är nödvändigt', 'lus'));
             }
 
             $recording_id = intval($_POST['recording_id']);
@@ -767,7 +566,7 @@ class LUS_Admin {
             }
 
             $this->send_json_response([
-                'message' => __('Assessment saved', 'lus'),
+                'message' => __('Bedömningen är sparad.', 'lus'),
                 'assessment_id' => $result['assessment_id'],
                 'results' => $result['results']
             ]);
@@ -785,14 +584,14 @@ class LUS_Admin {
             $this->verify_ajax_request();
 
             if (!isset($_POST['recording_id'])) {
-                throw new Exception(__('Recording ID required', 'lus'));
+                throw new Exception(__('Inspelnings-ID nödvändigt', 'lus'));
             }
 
             $recording_id = intval($_POST['recording_id']);
             $result = $this->db->delete_recording($recording_id);
 
             if (!$result) {
-                throw new Exception(__('Failed to delete recording', 'lus'));
+                throw new Exception(__('Kunde inte radera inspelningen.', 'lus'));
             }
 
             // Clear caches
@@ -800,7 +599,7 @@ class LUS_Admin {
             wp_cache_delete('lus_recordings_page_1');
 
             $this->send_json_response([
-                'message' => __('Recording deleted', 'lus')
+                'message' => __('Inspelning raderad.', 'lus')
             ]);
 
         } catch (Exception $e) {
@@ -820,7 +619,7 @@ class LUS_Admin {
                 json_decode(stripslashes($_POST['assignments']), true) : null;
 
             if (!is_array($assignments) || empty($assignments)) {
-                throw new Exception(__('No assignments to save', 'lus'));
+                throw new Exception(__('Det finns ingen tilldelning att spara.', 'lus'));
             }
 
             // Use database transaction
@@ -839,7 +638,7 @@ class LUS_Admin {
                     $recording = $this->db->get_recording($recording_id);
                     if (!$recording) {
                         $errors[] = sprintf(
-                            __('Recording %d not found', 'lus'),
+                            __('Inspelningen %d ej hittad', 'lus'),
                             $recording_id
                         );
                         continue;
@@ -849,7 +648,7 @@ class LUS_Admin {
                     $passage = $this->db->get_passage($passage_id);
                     if (!$passage) {
                         $errors[] = sprintf(
-                            __('Passage %d not found', 'lus'),
+                            __('Textpassagen %d ej hittad', 'lus'),
                             $passage_id
                         );
                         continue;
@@ -863,7 +662,7 @@ class LUS_Admin {
 
                     if (is_wp_error($result)) {
                         $errors[] = sprintf(
-                            __('Could not update recording %d: %s', 'lus'),
+                            __('Kunde inte uppdatera inspelningen %d: %s', 'lus'),
                             $recording_id,
                             $result->get_error_message()
                         );
@@ -874,7 +673,7 @@ class LUS_Admin {
 
                 // If no successful updates or too many errors, rollback
                 if ($success_count === 0 || count($errors) > ($success_count / 2)) {
-                    throw new Exception(__('Too many errors during update', 'lus'));
+                    throw new Exception(__('För många fel vid uppdatering.', 'lus'));
                 }
 
                 $this->db->commit();
@@ -882,8 +681,8 @@ class LUS_Admin {
                 // Prepare response message
                 $message = sprintf(
                     _n(
-                        '%d recording assigned.',
-                        '%d recordings assigned.',
+                        '%d inspelning tilldelad.',
+                        '%d inspelningar tilldelade.',
                         $success_count,
                         'lus'
                     ),
@@ -929,14 +728,14 @@ class LUS_Admin {
             $this->verify_ajax_request();
 
             if (!isset($_POST['passage_id'])) {
-                throw new Exception(__('Passage ID required', 'lus'));
+                throw new Exception(__('Textpassagens ID nödvändigt.', 'lus'));
             }
 
             $passage_id = intval($_POST['passage_id']);
             $questions = $this->db->get_questions_for_passage($passage_id);
 
             if (empty($questions)) {
-                throw new Exception(__('No questions found for this passage', 'lus'));
+                throw new Exception(__('Ingen fråga hittad för denna text.', 'lus'));
             }
 
             $this->send_json_response($questions);
@@ -961,15 +760,15 @@ class LUS_Admin {
             ];
 
             if (empty($question_data['passage_id']) || empty($question_data['question_text'])) {
-                throw new Exception(__('Required fields missing', 'lus'));
+                throw new Exception(__('Nödvändigt fält är tomt.', 'lus'));
             }
 
             if (isset($_POST['question_id']) && !empty($_POST['question_id'])) {
                 $result = $this->db->update_question(intval($_POST['question_id']), $question_data);
-                $message = __('Question updated successfully', 'lus');
+                $message = __('Frågan blev uppdaterad.', 'lus');
             } else {
                 $result = $this->db->create_question($question_data);
-                $message = __('Question created successfully', 'lus');
+                $message = __('Frågan blev skapad.', 'lus');
             }
 
             if (is_wp_error($result)) {
@@ -1005,7 +804,7 @@ class LUS_Admin {
             }
 
             $this->send_json_response([
-                'message' => __('Question deleted successfully', 'lus')
+                'message' => __('Frågan blev raderad.', 'lus')
             ]);
 
         } catch (Exception $e) {
@@ -1077,7 +876,7 @@ class LUS_Admin {
                 array_map('intval', (array)$_POST['recordings']) : [];
 
             if (empty($recordings)) {
-                throw new Exception(__('No recordings selected', 'lus'));
+                throw new Exception(__('Ingen inspelning vald.', 'lus'));
             }
 
             $this->db->begin_transaction();
@@ -1097,7 +896,7 @@ class LUS_Admin {
                 }
 
                 if ($success_count === 0) {
-                    throw new Exception(__('No recordings could be repaired', 'lus'));
+                    throw new Exception(__('Kunde inte tilldela inspelade filer.', 'lus'));
                 }
 
                 $this->db->commit();
@@ -1177,7 +976,7 @@ class LUS_Admin {
             $this->verify_ajax_request();
 
             if (!isset($_POST['assignment_id'])) {
-                throw new Exception(__('Assignment ID required', 'lus'));
+                throw new Exception(__('Tilldeningens ID är nödvändigt', 'lus'));
             }
 
             $assignment_id = intval($_POST['assignment_id']);
@@ -1188,7 +987,7 @@ class LUS_Admin {
             }
 
             $this->send_json_response([
-                'message' => __('Assignment deleted successfully', 'lus')
+                'message' => __('Tilldeningen är raderad', 'lus')
             ]);
 
         } catch (Exception $e) {
@@ -1204,14 +1003,14 @@ class LUS_Admin {
             $this->verify_ajax_request();
 
             if (!get_option('lus_enable_tracking', true)) {
-                throw new Exception(__('Activity tracking is disabled', 'lus'));
+                throw new Exception(__('Aktivitetsstatistik är inaktiverat', 'lus'));
             }
 
             $interactions = isset($_POST['interactions']) ?
                 json_decode(stripslashes($_POST['interactions']), true) : null;
 
             if (!is_array($interactions)) {
-                throw new Exception(__('Invalid interaction data', 'lus'));
+                throw new Exception(__('Ogiltig interaktionsdata', 'lus'));
             }
 
             $saved = 0;
@@ -1231,7 +1030,7 @@ class LUS_Admin {
             }
 
             $this->send_json_response([
-                'message' => sprintf(__('%d interactions saved', 'lus'), $saved)
+                'message' => sprintf(__('%d interaktioner sparade', 'lus'), $saved)
             ]);
 
         } catch (Exception $e) {

@@ -30,5 +30,5 @@ window.lusPublicUtils = {
 
 // Initialize when document is ready
 document.addEventListener("DOMContentLoaded", function () {
-  RAPublicUtils.initCollapsible();
+  lusPublicUtils.initCollapsible();
 });

@@ -37,39 +37,65 @@ class LUS {
     /**
      * Define the core functionality of the plugin.
      */
-    public function __construct() {
-        $this->plugin_name = 'lus';
-        $this->version = VERSION;
-
+    public function __construct(LUS_Database $db) {
+        // Ensure dependencies are loaded first
         $this->load_dependencies();
+
+        // Initialize properties
+        $this->db = $db;
+        $this->plugin_name = LUS_Constants::PLUGIN_NAME;
+        $this->version = LUS_Constants::PLUGIN_VERSION;
+
+        // Initialize plugin hooks and other components
         $this->set_locale();
         $this->define_admin_hooks();
         $this->define_public_hooks();
         $this->define_ajax_hooks();
     }
 
+
     /**
      * Load the required dependencies for this plugin.
      */
     private function load_dependencies() {
-        // Core plugin dependencies
-        require_once PLUGIN_DIR . 'includes/class-lus-loader.php';
-        require_once PLUGIN_DIR . 'includes/class-lus-i18n.php';
-        require_once PLUGIN_DIR . 'includes/class-lus-database.php';
+        // Constants and config
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/config/class-lus-constants.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/config/admin-strings.php';
 
-        // Feature-specific classes
-        require_once PLUGIN_DIR . 'includes/class-lus-recorder.php';
-        require_once PLUGIN_DIR . 'includes/class-lus-evaluator.php';
-        require_once PLUGIN_DIR . 'includes/class-lus-statistics.php';
-        require_once PLUGIN_DIR . 'includes/class-lus-assessment-handler.php';
+        // Core
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-loader.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-i18n.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-database.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-container.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-events.php';
+
+        // Feature modules
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-recorder.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-statistics.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-assessment-handler.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-export-handler.php';
+
+        // Strategies and interfaces
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/strategy/interface-lus-evaluation-strategy.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-evaluator.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/strategy/class-lus-levenshtein-strategy.php';
+
+        // Value objects
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/value-objects/class-lus-duration.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/value-objects/class-lus-score.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/value-objects/class-lus-status.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/value-objects/class-lus-difficulty-level.php';
+
+        // DTOs
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/dto/class-lus-passage-dto.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/dto/class-lus-recording-dto.php';
 
         // Admin and public interfaces
-        require_once PLUGIN_DIR . 'admin/class-lus-admin.php';
-        require_once PLUGIN_DIR . 'public/class-lus-public.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'admin/class-lus-admin.php';
+        require_once LUS_Constants::PLUGIN_DIR . 'public/class-lus-public.php';
 
         // Initialize main components
         $this->loader = new LUS_Loader();
-        $this->db = new LUS_Database();
     }
 
     /**
@@ -84,7 +110,11 @@ class LUS {
      * Register admin hooks
      */
     private function define_admin_hooks() {
-        $plugin_admin = new LUS_Admin($this->get_plugin_name(), $this->get_version(), $this->db);
+        // Ensure $this->db is an instance of LUS_Database before passing it.
+        if (!($this->db instanceof LUS_Database)) {
+            throw new InvalidArgumentException('Expected $db to be an instance of LUS_Database.');
+        }
+        $plugin_admin = new LUS_Admin($this->db);
 
         // Admin scripts and styles
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_styles');
@@ -93,6 +123,7 @@ class LUS {
         // Admin menu and settings
         $this->loader->add_action('admin_menu', $plugin_admin, 'add_menu_pages');
         $this->loader->add_action('admin_init', $plugin_admin, 'register_settings');
+
 
         // AJAX handlers
         $ajax_actions = [
@@ -122,7 +153,7 @@ class LUS {
      * Register public-facing hooks
      */
     private function define_public_hooks() {
-        $plugin_public = new LUS_Public($this->get_plugin_name(), $this->get_version(), $this->db);
+        $plugin_public = new LUS_Public($this->db);
 
         // Public scripts and styles
         $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_styles');
@@ -180,7 +211,7 @@ class LUS {
             'save_interactions'
         ];
 
-        $plugin_admin = new LUS_Admin($this->get_plugin_name(), $this->get_version(), $this->db);
+        $plugin_admin = new LUS_Admin($this->db);
 
         foreach ($admin_ajax_actions as $action) {
             $this->loader->add_action(
@@ -198,7 +229,7 @@ class LUS {
             'get_assessment'
         ];
 
-        $plugin_public = new LUS_Public($this->get_plugin_name(), $this->get_version(), $this->db);
+        $plugin_public = new LUS_Public($this->db);
 
         foreach ($public_ajax_actions as $action) {
             // Logged in users
@@ -224,37 +255,5 @@ class LUS {
      */
     public function run() {
         $this->loader->run();
-    }
-
-    /**
-     * The name of the plugin used to uniquely identify it.
-     * @return string The name of the plugin.
-     */
-    public function get_plugin_name() {
-        return $this->plugin_name;
-    }
-
-    /**
-     * The reference to the class that orchestrates the hooks with the plugin.
-     * @return LUS_Loader Orchestrates the hooks of the plugin.
-     */
-    public function get_loader() {
-        return $this->loader;
-    }
-
-    /**
-     * Retrieve the version number of the plugin.
-     * @return string The version number of the plugin.
-     */
-    public function get_version() {
-        return $this->version;
-    }
-
-    /**
-     * Get the database handler instance.
-     * @return LUS_Database The database handler instance.
-     */
-    public function get_db() {
-        return $this->db;
     }
 }

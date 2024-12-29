@@ -42,7 +42,7 @@ if ($passage_filter) {
         <div class="two-cols">
             <div>
                 <h2><?php _e('Så här använder du LUS', 'lus'); ?></h2>
-                <p><?php _e('Instruktionerna sparas mellan sessioner.', 'lus'); ?></p>
+                <p><?php _e('Instruktionerna sparas visade/dolda mellan sessioner.', 'lus'); ?></p>
                 <?php
                     // Instruction text can be filtered by themes/other plugins
                     echo wp_kses_post(apply_filters('lus_dashboard_instructions',
@@ -67,15 +67,15 @@ if ($passage_filter) {
     <!-- Recordings Widget -->
     <div class="lus-dashboard-widgets">
         <div class="lus-widget lus-recordings-widget">
-            <?php include PLUGIN_DIR . 'widgets/lus-recent-recordings.php'; ?>
+            <?php include LUS_Constants::PLUGIN_DIR . 'admin/partials/widgets/lus-recent-recordings.php'; ?>
         </div>
 
         <!-- Statistics Widget -->
         <div class="lus-widget lus-stats-widget">
-            <?php include PLUGIN_DIR . 'widgets/lus-statistics.php'; ?>
+            <?php include LUS_Constants::PLUGIN_DIR . 'admin/partials/widgets/lus-statistics.php'; ?>
 
             <?php if (get_option('lus_enable_tracking', true)): ?>
-            <?php include PLUGIN_DIR . 'widgets/lus-admin-activity.php'; ?>
+            <?php include LUS_Constants::PLUGIN_DIR . 'admin/partials/widgets/lus-admin-activity.php'; ?>
             <?php endif; ?>
         </div>
     </div>

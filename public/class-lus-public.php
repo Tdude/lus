@@ -16,9 +16,9 @@
     /**
      * Initialize the class
      */
-    public function __construct($plugin_name, $version, $db) {
-        $this->plugin_name = $plugin_name;
-        $this->version = $version;
+    public function __construct(LUS_Database $db) {
+        $this->plugin_name = LUS_Constants::PLUGIN_NAME;
+        $this->version = LUS_Constants::PLUGIN_VERSION;
         $this->db = $db;
         $this->assessment_handler = new LUS_Assessment_Handler($db);
     }
@@ -28,10 +28,10 @@
      */
     public function enqueue_styles() {
         wp_enqueue_style(
-            $this->plugin_name,
-            PLUGIN_URL . 'public/css/lus-public.css',
+            LUS_Constants::PLUGIN_NAME,
+            LUS_Constants::PLUGIN_URL . 'public/css/lus-public.css',
             [],
-            $this->version,
+            LUS_Constants::PLUGIN_VERSION,
             'all'
         );
     }
@@ -42,31 +42,31 @@
     public function enqueue_scripts() {
         // Main public script
         wp_enqueue_script(
-            $this->plugin_name,
-            PLUGIN_URL . 'public/js/lus-public.js',
+            LUS_Constants::PLUGIN_NAME,
+            LUS_Constants::PLUGIN_URL . 'public/js/lus-public.js',
             ['jquery'],
-            $this->version,
+            LUS_Constants::PLUGIN_VERSION,
             true
         );
 
         // Recorder script - only load when needed
         if (has_shortcode(get_post()->post_content, 'lus_recorder')) {
             wp_enqueue_script(
-                $this->plugin_name . '-recorder',
-                PLUGIN_URL . 'public/js/lus-recorder.js',
-                [$this->plugin_name],
-                $this->version,
+                LUS_Constants::PLUGIN_NAME . '-recorder',
+                LUS_Constants::PLUGIN_URL . 'public/js/lus-recorder.js',
+                [LUS_Constants::PLUGIN_NAME],
+                LUS_Constants::PLUGIN_VERSION,
                 true
             );
         }
 
         // Localize script
         wp_localize_script(
-            $this->plugin_name,
+            LUS_Constants::PLUGIN_NAME,
             'lusPublic',
             [
                 'ajaxurl' => admin_url('admin-ajax.php'),
-                'nonce' => NONCE_PUBLIC,
+                'nonce' => LUS_Constants::NONCE_PUBLIC,
                 'strings' => $this->get_strings(),
                 'user_id' => get_current_user_id(),
                 'is_logged_in' => is_user_logged_in()
@@ -96,8 +96,8 @@
         ], $atts);
 
         ob_start();
-        include PLUGIN_DIR . 'partials/recorder.php';
-        error_log('RECORDER PATH in class-lus-public.php: ' . PLUGIN_DIR . 'partials/recorder.php');
+        include LUS_Constants::PLUGIN_DIR . 'partials/recorder.php';
+        error_log('RECORDER PATH in class-lus-public.php: ' . LUS_Constants::PLUGIN_DIR . 'partials/recorder.php');
         return ob_get_clean();
     }
 
@@ -115,7 +115,7 @@
         ], $atts);
 
         ob_start();
-        include PLUGIN_DIR . 'partials/results.php';
+        include LUS_Constants::PLUGIN_DIR . 'partials/results.php';
         return ob_get_clean();
     }
 
@@ -190,7 +190,7 @@
      */
     public function show_login_message() {
         ob_start();
-        include PLUGIN_DIR . 'includes/lus-login-message.php';
+        include LUS_Constants::PLUGIN_DIR . 'includes/lus-login-message.php';
         return ob_get_clean();
     }
 

@@ -89,8 +89,14 @@ $questions = $selected_passage_id ? $this->db->get_questions_for_passage($select
                 </tr>
             </thead>
             <tbody>
+                <?php
+                    if (!class_exists('LUS_Statistics')) {
+                        include LUS_Constants::PLUGIN_DIR . 'admin/class-lus-statistics.php';
+                    }
+                ?>
                 <?php foreach ($questions as $question):
-                        $stats = $this->db->get_question_statistics($question->id);
+                        $lus_statistics = new LUS_Statistics($this->db);
+                        $stats = $lus_statistics->get_question_statistics($question->id);
                     ?>
                 <tr>
                     <td><?php echo esc_html($question->question_text); ?></td>

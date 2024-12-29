@@ -9,7 +9,7 @@
 interface LUS_Evaluation_Strategy {
     /**
      * Evaluate a response against a correct answer
-     *
+     * See also class-lus-evaluator.php and class-lus-assessment-handler.php
      * @param string $response Student's response
      * @param string $correctAnswer Correct answer to compare against
      * @return array Evaluation result with keys:
@@ -18,7 +18,7 @@ interface LUS_Evaluation_Strategy {
      *               - confidence: float (0-1)
      *               - details: array (additional evaluation details)
      */
-    public function evaluate(string $response, string $correctAnswer): array;
+     public function evaluate(string $response, string $correctAnswer): array;
 
     /**
      * Get the confidence score for the last evaluation

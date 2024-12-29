@@ -13,13 +13,29 @@ if (!defined('ABSPATH')) {
 
 
 class LUS_Constants {
-    /**
-     * Plugin version and requirements
-     */
-    const VERSION = '0.0.32';
+    public static function init() {
+        if (!defined('LUS_VERSION')) {
+            define('LUS_VERSION', '0.0.5');
+            define('LUS_PLUGIN_NAME', plugin_basename(LUS_PLUGIN_DIR . 'lus.php'));
+            define('LUS_PLUGIN_URL', plugin_dir_url(LUS_PLUGIN_DIR . 'lus.php'));
+        }
+    }
+
+    public static function init_upload_paths() {
+        if (!defined('LUS_UPLOAD_DIR')) {
+            $upload_dir = wp_upload_dir();
+            define('LUS_UPLOAD_DIR', $upload_dir['basedir'] . '/lus');
+            define('LUS_UPLOAD_URL', $upload_dir['baseurl'] . '/lus');
+        }
+    }
+
+    // Core constants that don't depend on WordPress
     const MIN_WP_VERSION = '5.8';
     const MIN_PHP_VERSION = '7.4';
     const TEXT_DOMAIN = 'lus';
+
+    const PLUGIN_VERSION = LUS_VERSION;
+    const PLUGIN_NAME = LUS_PLUGIN_NAME;
     const PLUGIN_DIR = LUS_PLUGIN_DIR;
     const PLUGIN_URL = LUS_PLUGIN_URL;
     const UPLOAD_DIR = LUS_UPLOAD_DIR;
@@ -67,8 +83,10 @@ class LUS_Constants {
     /**
      * Assessment settings
      */
-    const MIN_SIMILARITY_SCORE = 90; // Minimum similarity score for correct answer
+    const MIN_CONFIDENCE_THRESHOLD = 0.8; // Minimum similarity score for correct answer
     const MAX_DIFFICULTY_LEVEL = 20;
+    const TEXT_RESPONSE_WEIGHT = 0.5;
+    const AUDIO_EVALUATION_WEIGHT = 0.5;
 
     /**
      * UI settings
@@ -129,3 +147,9 @@ class LUS_Constants {
     const EVENT_RECORDING_SAVED = 'recording_saved';
     const EVENT_ASSESSMENT_COMPLETED = 'assessment_completed';
 }
+
+// Initialize core constants immediately
+LUS_Constants::init();
+
+// Initialize upload paths after WordPress is loaded
+add_action('plugins_loaded', ['LUS_Constants', 'init_upload_paths'], 5);

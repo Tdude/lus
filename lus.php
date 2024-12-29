@@ -11,7 +11,7 @@
  * Plugin Name: LUS
  * Plugin URI:  https://klickomaten.com/lus
  * Description: A modularized plugin for recording and evaluating reading comprehension
- * Version:     0.0.2
+ * Version:     0.0.5
  * Author:      Tibor Berki
  * Author URI:  https://klickomaten.com
  * Text Domain: lus
@@ -35,28 +35,29 @@ if (!defined('WPINC')) {
     die;
 }
 
-/**
- * Plugin main paths and URLs seem to need be here.
- * Nomenclature is in includes/config/class-lus-contants.php
- */
-define('LUS_PLUGIN_NAME', plugin_basename(__FILE__));
+// Essential plugin paths and constants first
 define('LUS_PLUGIN_DIR', plugin_dir_path(__FILE__));
-define('LUS_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('LUS_UPLOAD_DIR', wp_upload_dir()['basedir'] . '/lus');
-define('LUS_UPLOAD_URL', wp_upload_dir()['baseurl'] . '/lus');
+require_once LUS_PLUGIN_DIR . 'includes/config/class-lus-constants.php';
+LUS_Constants::init();
 
+// Then core classes
+require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-loader.php';
+require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-database.php';
+require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus.php';
 
+// Upload paths after WP loads
+function lus_setup_upload_paths() {
+    if (!defined('LUS_UPLOAD_DIR')) {
+        $upload_dir = wp_upload_dir();
+        define('LUS_UPLOAD_DIR', $upload_dir['basedir'] . '/lus');
+        define('LUS_UPLOAD_URL', $upload_dir['baseurl'] . '/lus');
+    }
+}
+
+add_action('plugins_loaded', 'lus_setup_upload_paths', 5);
 // Ensure WordPress functions are available. ABSPATH is WP const.
 if (!function_exists('plugin_dir_path')) {
     require_once(ABSPATH . 'wp-admin/includes/plugin.php');
-}
-
-// Define plugin constants
-require_once plugin_dir_path(__FILE__) . 'includes/config/class-lus-constants.php';
-
-// Define directory path if not in constants
-if (!defined('PLUGIN_DIR')) {
-    define('PLUGIN_DIR', plugin_dir_path(__FILE__));
 }
 
 // Autoloader for plugin classes
@@ -116,21 +117,16 @@ register_activation_hook(__FILE__, function() {
     LUS_Activator::activate();
 });
 
+
 /**
  * Register deactivation hook
  */
 register_deactivation_hook(__FILE__, function() {
     require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-deactivator.php';
+    add_option('lus_preserve_data', true);
     LUS_Deactivator::deactivate();
 });
 
-/**
- * Allow setting data preservation on deactivation
- */
-register_deactivation_hook(__FILE__, function() {
-    // Default to preserving data
-    add_option('lus_preserve_data', true);
-});
 
 /**
  * Initialize the service container
@@ -138,42 +134,43 @@ register_deactivation_hook(__FILE__, function() {
 require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-container.php';
 LUS_Container::registerCommonServices();
 
+
 /**
  * Initialize the plugin
  */
 function run_lus() {
-    try {
-        // Core plugin instance
-        $plugin = new LUS();
+    static $initialized = false;
+    if ($initialized) return;
+    $initialized = true;
 
-        // Initialize event system
+    try {
+        // Initialize database first
+        $db = new LUS_Database();
+
+        // Core plugin instance with database dependency
+        $plugin = new LUS($db);
+        $plugin->run();
+
+        // Event system after core initialization
         LUS_Events::on('plugin_initialized', function() {
             do_action('lus_plugin_initialized');
         });
-
-        // Run plugin
-        $plugin->run();
-
-        // Emit initialization event
         LUS_Events::emit('plugin_initialized');
 
     } catch (Exception $e) {
-        // Log error and display admin notice
         error_log('LUS Plugin Error: ' . $e->getMessage());
         add_action('admin_notices', function() use ($e) {
             printf(
                 '<div class="notice notice-error"><p>%s</p></div>',
-                esc_html(sprintf(
-                    __('LUS Plugin Error: %s', 'lus'),
-                    $e->getMessage()
-                ))
+                esc_html(sprintf(__('LUS Plugin Error: %s', 'lus'), $e->getMessage()))
             );
         });
     }
 }
 
 // Start the plugin
-add_action('plugins_loaded', 'run_lus');
+add_action('plugins_loaded', 'run_lus', 10);
+
 
 /**
  * Register plugin lifecycle hooks
@@ -188,6 +185,7 @@ class LUS_Lifecycle {
         }
     }
 
+
     /**
      * Check for updates
      *
@@ -199,28 +197,49 @@ class LUS_Lifecycle {
             return $transient;
         }
 
-        // Check for updates logic here
+        $plugin_slug = 'your-plugin-slug';
+        $plugin_file = 'your-plugin/your-plugin.php'; // Plugin file path as it appears in WP plugins list
+        $current_version = $transient->checked[$plugin_file] ?? null;
+
+        // Fetch the latest version information from a remote server
+        $response = wp_remote_get('https://github.com/Tdude/lus/updater.json');
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            return $transient; // Exit if there's an error or invalid response
+        }
+
+        $update_info = json_decode(wp_remote_retrieve_body($response), true);
+
+        if (isset($update_info['version'], $update_info['download_url']) &&
+            version_compare($current_version, $update_info['version'], '<')
+        ) {
+            // Add update details to the transient
+            $transient->response[$plugin_file] = (object) [
+                'slug' => $plugin_slug,
+                'plugin' => $plugin_file,
+                'new_version' => $update_info['version'],
+                'package' => $update_info['download_url'],
+                'tested' => $update_info['tested'], // Optional
+                'requires' => $update_info['requires'], // Optional
+            ];
+        }
+
         return $transient;
     }
+
 
     /**
      * Clean up temporary files
      */
     public static function cleanup_temp_files() {
-        $temp_dir = LUS_Constants::UPLOAD_DIR . '/lus/temp';
+        if (!defined('LUS_UPLOAD_DIR')) return;
+        $temp_dir = LUS_UPLOAD_DIR . '/temp';
 
         if (is_dir($temp_dir)) {
-            $files = glob($temp_dir . '/*');
-            $now = time();
-
-            foreach ($files as $file) {
-                if (is_file($file) && ($now - filemtime($file) > 86400)) {
-                    @unlink($file);
-                }
-            }
+            array_map('unlink', glob($temp_dir . '/*'));
         }
     }
 }
+
 
 // Register cleanup schedule
 add_action('wp', function() {

@@ -9,26 +9,26 @@ LUS.Handlers.Questions = {
 
   bindEvents() {
     // Edit question
-    $(".lus-edit-question").on("click", (e) => {
+    jQuery(".lus-edit-question").on("click", (e) => {
       e.preventDefault();
-      const $button = $(e.currentTarget);
+      const $button = jQuery(e.currentTarget);
       this.handleEdit($button.data());
     });
 
     // Delete question
-    $(".lus-delete-question").on("click", (e) => {
+    jQuery(".lus-delete-question").on("click", (e) => {
       e.preventDefault();
-      const $button = $(e.currentTarget);
+      const $button = jQuery(e.currentTarget);
       this.handleDelete($button.data("id"), $button);
     });
 
     // Cancel edit
-    $("#lus-cancel-edit").on("click", () => {
+    jQuery("#lus-cancel-edit").on("click", () => {
       this.resetForm();
     });
 
     // Form submission
-    $("#lus-question-form").on("submit", (e) => {
+    jQuery("#lus-question-form").on("submit", (e) => {
       e.preventDefault();
       this.handleSubmit(e);
     });
@@ -36,15 +36,16 @@ LUS.Handlers.Questions = {
 
   handleEdit(questionData) {
     // Update form with question data
-    $("#question_id").val(questionData.id);
-    $("#question_text").val(questionData.question);
-    $("#correct_answer").val(questionData.answer);
-    $("#weight").val(questionData.weight);
+    jQuery("#question_id").val(questionData.id);
+    jQuery("#question_text").val(questionData.question);
+    jQuery("#correct_answer").val(questionData.answer);
+    jQuery("#weight").val(questionData.weight);
 
     // Update form state
-    $("#lus-form-title").text(LUS.Strings.editQuestion);
-    $("#lus-cancel-edit").show();
-    $("#submit").val(LUS.Strings.updateQuestion);
+    // The form's id is lus-question-form
+    jQuery("#lus-form-title").text(LUS.Strings.editQuestion);
+    jQuery("#lus-cancel-edit").show();
+    jQuery("#submit").val(LUS.Strings.updateQuestion);
 
     // Scroll to form
     LUS.UI.scrollTo("#lus-question-form");
@@ -69,7 +70,7 @@ LUS.Handlers.Questions = {
           LUS.UI.Notices.show("success", response.message);
 
           // Check if no questions left
-          if ($(".lus-questions-list tbody tr").length === 0) {
+          if (jQuery(".lus-questions-list tbody tr").length === 0) {
             location.reload();
           }
         });
@@ -80,9 +81,9 @@ LUS.Handlers.Questions = {
   },
 
   handleSubmit(e) {
-    const $form = $(e.currentTarget);
+    const $form = jQuery(e.currentTarget);
     const $submitButton = $form.find("#submit");
-    const isEdit = $("#question_id").val() !== "";
+    const isEdit = jQuery("#question_id").val() !== "";
 
     // Show loading state
     LUS.UI.LoadingState.show($submitButton, LUS.Strings.saving);
@@ -121,20 +122,20 @@ LUS.Handlers.Questions = {
   },
 
   resetForm() {
-    const $form = $("#lus-question-form");
+    const $form = jQuery("#lus-question-form");
 
     // Reset form and hidden fields
     $form[0].reset();
-    $("#question_id").val("");
+    jQuery("#question_id").val("");
 
     // Reset form state
-    $("#lus-form-title").text(LUS.Strings.addNewQuestion);
-    $("#lus-cancel-edit").hide();
-    $("#submit").val(LUS.Strings.saveQuestion);
+    jQuery("#lus-form-title").text(LUS.Strings.addNewQuestion);
+    jQuery("#lus-cancel-edit").hide();
+    jQuery("#submit").val(LUS.Strings.saveQuestion);
 
     // Clear notices
-    $(".notice").fadeOut(400, function () {
-      $(this).remove();
+    jQuery(".notice").fadeOut(400, function () {
+      jQuery(this).remove();
     });
   },
 };

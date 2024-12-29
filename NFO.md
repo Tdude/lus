@@ -1,11 +1,12 @@
-# Reading Assesment WP plugin
+# Reading Assesment WP plugin named Lus
 
 This is to be a modularized plugin for Wordpress. It should be able to do at least the following in WP admin:
 
 - Write and show a text, set a difficulty score for that text
 - Write questions about the text (to assess reading comprehension)
-- Evaluate recording and answers to the questions manually
-- New functionality: evaluate voice recording and the assessment questions' answers to the read and recorded text with voice recognition AI
+- Evaluate recording and answers to the questions, both manually and with AI
+- New functionality: evaluate voice recording and the assessment questions' answers to the recorded text with voice recognition AI.
+- The AI implementation is to be separate modules where both various AI models can be installed and we can train our own model to recognise various dialects and reading proficiency.
 
 In the public display:
 

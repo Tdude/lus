@@ -13,9 +13,9 @@ class LUS_i18n {
      */
     public function load_plugin_textdomain() {
         load_plugin_textdomain(
-            'lus',
+            LUS_Constants::PLUGIN_NAME ,
             false,
-            dirname(dirname(plugin_basename(__FILE__))) . '/languages/'
+            dirname( LUS_Constants::PLUGIN_DIR ) . '/languages/'
         );
     }
 }
