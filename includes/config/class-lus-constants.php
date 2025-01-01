@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 class LUS_Constants {
     public static function init() {
         if (!defined('LUS_VERSION')) {
-            define('LUS_VERSION', '0.0.5');
+            define('LUS_VERSION', '0.0.6');
             define('LUS_PLUGIN_NAME', plugin_basename(LUS_PLUGIN_DIR . 'lus.php'));
             define('LUS_PLUGIN_URL', plugin_dir_url(LUS_PLUGIN_DIR . 'lus.php'));
         }
