@@ -1,3 +1,4 @@
+// File: lus-handlers.php
 LUS.Handlers = {
   Generic: {
     init() {
