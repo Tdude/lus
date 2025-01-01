@@ -2,65 +2,74 @@
 /** class-lus.php
  * The core plugin class.
  *
- * This is used to define internationalization, admin-specific hooks,
- * and public-facing site hooks.
+ * This is used to define internationalization, admin-specific hooks and public-facing site hooks.
+ * The proper initialization order:
+ * constants -> core classes -> singleton instances -> hooks
  *
  * @package    LUS
  * @subpackage LUS/includes
  */
 
 class LUS {
-    /**
-     * Maintains and registers all hooks for the plugin.
-     * @var LUS_Loader
-     */
-    protected $loader;
+    private static $instance = null;
+    private static $hook_registered = false;
+    private static $admin_instance = null;
+    private static $public_instance = null;
+    private $db;
+    private $plugin_name;
+    private $version;
+    private $loader;
+    private static $initialized = false;
 
     /**
-     * The unique identifier of this plugin.
-     * @var string
+     * Get singleton instance
      */
-    protected $plugin_name;
+    public static function get_instance(LUS_Database $db = null) {
+        if (null === self::$instance) {
+            if (null === $db) {
+                throw new Exception('Database instance required for first initialization');
+            }
+            lus_debug_log('Creating new LUS instance');
+            self::$instance = new self($db);
+        }
+        return self::$instance;
+    }
 
     /**
-     * The current version of the plugin.
-     * @var string
+     * Private constructor to prevent direct instantiation
      */
-    protected $version;
-
-    /**
-     * Database handler instance.
-     * @var LUS_Database
-     */
-    protected $db;
-
-    /**
-     * Define the core functionality of the plugin.
-     */
-    public function __construct(LUS_Database $db) {
-        // Ensure dependencies are loaded first
-        $this->load_dependencies();
-
-        // Initialize properties
+    private function __construct(LUS_Database $db) {
+        if (!$db instanceof LUS_Database) {
+            throw new InvalidArgumentException('Invalid database instance');
+        }
         $this->db = $db;
         $this->plugin_name = LUS_Constants::PLUGIN_NAME;
         $this->version = LUS_Constants::PLUGIN_VERSION;
+        $this->loader = new LUS_Loader();
 
-        // Initialize plugin hooks and other components
+        lus_debug_log('LUS constructor called');
+        $this->load_dependencies();
         $this->set_locale();
-        $this->define_admin_hooks();
-        $this->define_public_hooks();
-        $this->define_ajax_hooks();
     }
 
+    /**
+     * Prevent cloning of the instance
+     */
+    private function __clone() {}
+
+    /**
+     * Prevent unserializing of the instance
+     */
+    public function __wakeup() {
+        throw new Exception("Cannot unserialize singleton");
+    }
 
     /**
      * Load the required dependencies for this plugin.
      */
     private function load_dependencies() {
-        // Constants and config
-        require_once LUS_Constants::PLUGIN_DIR . 'includes/config/class-lus-constants.php';
-        require_once LUS_Constants::PLUGIN_DIR . 'includes/config/admin-strings.php';
+        // Use base constants for core files
+        require_once LUS_Constants::PLUGIN_DIR . 'includes/config/strings-lus-admin.php';
 
         // Core
         require_once LUS_Constants::PLUGIN_DIR . 'includes/class-lus-loader.php';
@@ -99,9 +108,14 @@ class LUS {
     }
 
     /**
-     * Define the locale for internationalization.
+     * Define the locale for internationalization, i18n.
      */
     private function set_locale() {
+        // Debug loader initialization
+        if (!$this->loader) {
+            error_log('$this->loader is not initialized!');
+            return;
+        }
         $plugin_i18n = new LUS_i18n();
         $this->loader->add_action('plugins_loaded', $plugin_i18n, 'load_plugin_textdomain');
     }
@@ -110,93 +124,53 @@ class LUS {
      * Register admin hooks
      */
     private function define_admin_hooks() {
-        // Ensure $this->db is an instance of LUS_Database before passing it.
-        if (!($this->db instanceof LUS_Database)) {
-            throw new InvalidArgumentException('Expected $db to be an instance of LUS_Database.');
+        if (self::$admin_instance) {
+            lus_debug_log('Admin hooks already registered');
+            return;
         }
-        $plugin_admin = new LUS_Admin($this->db);
 
-        // Admin scripts and styles
-        $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_styles');
-        $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts');
+        self::$admin_instance = LUS_Admin::get_instance($this->db);
+        self::$admin_instance->init_hooks(); // Initialize hooks only once
 
-        // Admin menu and settings
-        $this->loader->add_action('admin_menu', $plugin_admin, 'add_menu_pages');
-        $this->loader->add_action('admin_init', $plugin_admin, 'register_settings');
-
-
-        // AJAX handlers
-        $ajax_actions = [
-            'get_passage',
-            'get_passages',
-            'delete_passage',
-            'get_questions',
-            'delete_question',
-            'get_results',
-            'delete_assignment',
-            'save_assessment',
-            'delete_recording',
-            'save_interactions',
-            'bulk_assign_recordings'
-        ];
-
-        foreach ($ajax_actions as $action) {
-            $this->loader->add_action(
-                'wp_ajax_lus_admin_' . $action,
-                $plugin_admin,
-                'ajax_' . $action
-            );
-        }
+        // Admin scripts and styles - remove duplicate registrations
+        $this->loader->add_action('admin_enqueue_scripts', self::$admin_instance, 'enqueue_styles', 10, 1);
+        $this->loader->add_action('admin_enqueue_scripts', self::$admin_instance, 'enqueue_scripts', 10, 1);
     }
 
     /**
      * Register public-facing hooks
      */
     private function define_public_hooks() {
-        $plugin_public = new LUS_Public($this->db);
-
-        // Public scripts and styles
-        $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_styles');
-        $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_scripts');
-
-        // Shortcodes and content handling
-        $this->loader->add_action('init', $plugin_public, 'register_shortcodes');
-
-        // Public AJAX handlers
-        $public_ajax_actions = [
-            'get_questions',
-            'save_recording',
-            'submit_answers',
-            'get_assessment'
-        ];
-
-        foreach ($public_ajax_actions as $action) {
-            // For logged-in users
-            $this->loader->add_action(
-                'wp_ajax_lus_' . $action,
-                $plugin_public,
-                'ajax_' . $action
-            );
-
-            // For non-logged-in users (if needed)
-            if (in_array($action, ['get_questions'])) {
-                $this->loader->add_action(
-                    'wp_ajax_nopriv_lus_' . $action,
-                    $plugin_public,
-                    'ajax_' . $action
-                );
-            }
+        if (self::$public_instance) {
+            lus_debug_log('Public hooks already registered');
+            return;
         }
 
+        self::$public_instance = new LUS_Public($this->db);
+
+        // Public scripts and styles
+        $this->loader->add_action('wp_enqueue_scripts', self::$public_instance, 'enqueue_styles');
+        $this->loader->add_action('wp_enqueue_scripts', self::$public_instance, 'enqueue_scripts');
+
+        // Shortcodes and content handling
+        $this->loader->add_action('init', self::$public_instance, 'register_shortcodes');
+
         // User handling
-        $this->loader->add_filter('login_redirect', $plugin_public, 'subscriber_login_redirect', 10, 3);
-        $this->loader->add_action('wp_footer', $plugin_public, 'show_login_message');
+        $this->loader->add_filter('login_redirect', self::$public_instance, 'subscriber_login_redirect', 10, 3);
+        $this->loader->add_action('wp_footer', self::$public_instance, 'show_login_message');
     }
 
     /**
      * Register all AJAX handlers.
      */
     private function define_ajax_hooks() {
+        static $ajax_hooks_registered = false;
+        if ($ajax_hooks_registered) {
+            lus_debug_log('AJAX hooks already registered');
+            return;
+        }
+        $ajax_hooks_registered = true;
+
         // Admin AJAX handlers
         $admin_ajax_actions = [
             'get_passage',
@@ -211,6 +185,7 @@ class LUS {
             'save_interactions'
         ];
 
+        // Direct instantiation for admin
         $plugin_admin = new LUS_Admin($this->db);
 
         foreach ($admin_ajax_actions as $action) {
@@ -254,6 +229,23 @@ class LUS {
      * Run the loader to execute all the hooks with WordPress.
      */
     public function run() {
+        if (self::$hook_registered) {
+            lus_debug_log('Preventing duplicate hook registration');
+            return;
+        }
+        self::$hook_registered = true;
+
+        lus_debug_log('Registering hooks');
+        $this->define_admin_hooks();
+        $this->define_public_hooks();
+        $this->define_ajax_hooks();
         $this->loader->run();
+    }
+
+    /**
+     * Get the loader that's responsible for maintaining and registering all hooks.
+     */
+    public function get_loader() {
+        return $this->loader;
     }
 }

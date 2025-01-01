@@ -7,6 +7,8 @@
  */
 
  class LUS_Admin {
+    private static $instance = null;
+    private static $hooks_registered = false;
     private $plugin_name;
     private $version;
     private $db;
@@ -23,25 +25,47 @@
         'chartjs' => ['url' => 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js', 'version' => '3.9.1', 'pages' => ['lus-installningar_page_lus-results']],
     ];
 
+    public static function get_instance(LUS_Database $db = null) {
+        if (null === self::$instance) {
+            if (null === $db) {
+                throw new Exception('Database instance required for admin');
+            }
+            self::$instance = new self($db);
+        }
+        return self::$instance;
+    }
 
     public function __construct(LUS_Database $db) {
+        if (self::$instance !== null) {
+            // Prevent duplicate instantiation
+            return self::$instance;
+        }
         $this->plugin_name = LUS_Constants::PLUGIN_NAME;
         $this->version = LUS_Constants::PLUGIN_VERSION;
         $this->db = $db;
-        $this->init_hooks();
         $this->load_strings();
     }
 
     private function init_hooks(): void {
+        if (self::$hooks_registered) {
+            return;
+        }
+        self::$hooks_registered = true;
+
+        remove_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
+        remove_action('admin_menu', [$this, 'add_menu_pages']);
+        remove_action('admin_init', [$this, 'register_settings']);
+
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('admin_menu', [$this, 'add_menu_pages']);
         add_action('admin_init', [$this, 'register_settings']);
         add_filter('plugin_action_links_' . LUS_Constants::PLUGIN_NAME, [$this, 'add_settings_link']);
+
         $this->register_ajax_handlers();
     }
 
     private function load_strings(): void {
-        $strings_path = LUS_Constants::PLUGIN_DIR . 'includes/config/admin-strings.php';
+        $strings_path = LUS_Constants::PLUGIN_DIR . 'includes/config/strings-lus-admin.php';
         $this->strings = file_exists($strings_path) ? require $strings_path : [];
     }
 
@@ -65,7 +89,7 @@
     public function enqueue_assets(): void {
         $screen = get_current_screen();
         if (!$screen) return;
-        echo 'Current Screen ID: ' . $screen->id . '<br>';
+        // echo 'Current Screen ID: ' . $screen->id . '<br>';
         $this->enqueue_styles();
         $this->enqueue_scripts($screen->id);
     }
@@ -74,26 +98,32 @@
         wp_enqueue_style($this->plugin_name, LUS_Constants::PLUGIN_URL . 'admin/css/lus-admin.css', [], $this->version, 'all');
     }
 
+
     public function enqueue_scripts(string $screen_id): void {
         if (!isset(self::SCRIPT_DEPS[$screen_id])) return;
-
-        // Enqueue core, UI, and handler scripts
+        // Enqueue core, UI, and handler scripts IF NEEDED
         foreach (self::SCRIPT_DEPS[$screen_id] as $type => $deps) {
             $this->enqueue_script($type, $type === 'core' || $type === 'ui' ? "admin/js/lus-{$type}.js" : "admin/js/handlers/lus-{$type}-handler.js", $deps);
         }
+
         // Enqueue external scripts
         foreach (self::EXTERNAL_SCRIPTS as $handle => $script) {
             if (in_array($screen_id, $script['pages'])) {
                 wp_enqueue_script($handle, $script['url'], [], $script['version'], true);
             }
         }
-        // Localize script data
-        wp_localize_script($this->plugin_name, 'lusStrings', [
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => LUS_Constants::NONCE_ADMIN,
-        ]);
+        // Localize strings to the core script and send to JS
+        $localized_strings = $this->get_localized_strings();
+        wp_localize_script("{$this->plugin_name}-core", 'LUSStrings', $localized_strings);
+
     }
 
+    private function get_localized_strings(): array {
+        return array_merge($this->strings, [
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce(LUS_Constants::NONCE_ADMIN),
+        ]);
+    }
 
     public function enqueue_script(string $handle, string $path, array $deps): void {
         $url = LUS_Constants::PLUGIN_URL . $path;
@@ -106,7 +136,13 @@
         error_log('Enqueuing script: ' . "{$this->plugin_name}-{$handle} with deps: " . implode(',', $mapped_deps));
     }
 
+
+
     public function add_menu_pages(): void {
+        static $menu_added = false;
+        if ($menu_added) return;
+        $menu_added = true;
+
         // Add main menu page
         $this->page_hooks['main'] = add_menu_page(
             __('Läsuppskattning', 'lus'),

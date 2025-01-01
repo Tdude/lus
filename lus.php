@@ -11,7 +11,7 @@
  * Plugin Name: LUS
  * Plugin URI:  https://klickomaten.com/lus
  * Description: A modularized plugin for recording and evaluating reading comprehension
- * Version:     0.0.5
+ * Version:     0.0.6
  * Author:      Tibor Berki
  * Author URI:  https://klickomaten.com
  * Text Domain: lus
@@ -75,6 +75,7 @@ spl_autoload_register(function ($class) {
     $paths = [
         'includes',
         'includes/dto',
+        'includes/factory',
         'includes/strategy',
         'includes/value-objects',
         'admin',
@@ -139,19 +140,11 @@ LUS_Container::registerCommonServices();
  * Initialize the plugin
  */
 function run_lus() {
-    static $initialized = false;
-    if ($initialized) return;
-    $initialized = true;
-
     try {
-        // Initialize database first
         $db = new LUS_Database();
-
-        // Core plugin instance with database dependency
-        $plugin = new LUS($db);
+        $plugin = LUS::get_instance($db);
         $plugin->run();
 
-        // Event system after core initialization
         LUS_Events::on('plugin_initialized', function() {
             do_action('lus_plugin_initialized');
         });
@@ -197,8 +190,8 @@ class LUS_Lifecycle {
             return $transient;
         }
 
-        $plugin_slug = 'your-plugin-slug';
-        $plugin_file = 'your-plugin/your-plugin.php'; // Plugin file path as it appears in WP plugins list
+        $plugin_slug = 'lus';
+        $plugin_file = 'lus/lus.php'; // Plugin file path as it appears in WP plugins list
         $current_version = $transient->checked[$plugin_file] ?? null;
 
         // Fetch the latest version information from a remote server
