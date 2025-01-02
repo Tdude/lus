@@ -11,26 +11,26 @@ LUS.Handlers.Passages = {
 
   bindEvents() {
     // Edit passage
-    $(".lus-edit-passage").on("click", (e) => {
+    jQuery(".lus-edit-passage").on("click", (e) => {
       e.preventDefault();
-      const $button = $(e.currentTarget);
+      const $button = jQuery(e.currentTarget);
       this.handleEdit($button.data());
     });
 
     // Delete passage
-    $(".lus-delete-passage").on("click", (e) => {
+    jQuery(".lus-delete-passage").on("click", (e) => {
       e.preventDefault();
-      const $button = $(e.currentTarget);
+      const jQuerybutton = jQuery(e.currentTarget);
       this.handleDelete($button.data("id"), $button.data("title"), $button);
     });
 
     // Cancel edit
-    $("#lus-cancel-edit").on("click", () => {
+    jQuery("#lus-cancel-edit").on("click", () => {
       this.resetForm();
     });
 
     // Form submission
-    $("#lus-passage-form").on("submit", (e) => {
+    jQuery("#lus-passage-form").on("submit", (e) => {
       e.preventDefault();
       this.handleSubmit(e);
     });
@@ -47,7 +47,9 @@ LUS.Handlers.Passages = {
   },
 
   handleEdit(passageData) {
-    // Show loading state
+    // Show text strings from strings-lus-admin
+    console.log(LUS.Strings.loading); // Outputs: Laddar...
+    console.log(LUS.Strings.passages.title); // Outputs: Texter
     LUS.UI.LoadingState.show("#lus-form-title", LUS.Strings.loading);
 
     LUS.Data.request("get_passage", {
@@ -55,22 +57,22 @@ LUS.Handlers.Passages = {
     })
       .then((passage) => {
         // Populate form
-        $("#passage_id").val(passage.id);
-        $("#title").val(passage.title);
-        $("#time_limit").val(passage.time_limit);
-        $("#difficulty_level").val(passage.difficulty_level);
+        jQuery("#passage_id").val(passage.id);
+        jQuery("#title").val(passage.title);
+        jQuery("#time_limit").val(passage.time_limit);
+        jQuery("#difficulty_level").val(passage.difficulty_level);
 
         // Update TinyMCE if available
         if (typeof tinyMCE !== "undefined" && tinyMCE.get("content")) {
           tinyMCE.get("content").setContent(passage.content);
         } else {
-          $("#content").val(passage.content);
+          jQuery("#content").val(passage.content);
         }
 
         // Update form state
-        $("#lus-form-title").text(LUS.Strings.editPassage);
-        $("#lus-cancel-edit").show();
-        $("#submit").val(LUS.Strings.updatePassage);
+        jQuery("#lus-form-title").text(LUS.Strings.editPassage);
+        jQuery("#lus-cancel-edit").show();
+        jQuery("#submit").val(LUS.Strings.updatePassage);
 
         // Scroll to form
         LUS.UI.scrollTo("#lus-passage-form");
@@ -117,7 +119,7 @@ LUS.Handlers.Passages = {
           LUS.UI.LoadingState.success($button, response.data.message);
 
           // Reload if no rows left
-          if ($(".lus-passages-list tbody tr").length === 0) {
+          if (jQuery(".lus-passages-list tbody tr").length === 0) {
             location.reload();
           }
         });
@@ -128,9 +130,9 @@ LUS.Handlers.Passages = {
   },
 
   handleSubmit(e) {
-    const $form = $(e.currentTarget);
+    const $form = jQuery(e.currentTarget);
     const $submitButton = $form.find("#submit");
-    const isEdit = $("#passage_id").val() !== "";
+    const isEdit = jQuery("#passage_id").val() !== "";
 
     // Show loading state
     LUS.UI.LoadingState.show($submitButton, LUS.Strings.saving);
@@ -176,11 +178,11 @@ LUS.Handlers.Passages = {
   },
 
   resetForm() {
-    const $form = $("#lus-passage-form");
+    const jQueryform = $("#lus-passage-form");
 
     // Reset hidden fields and regular inputs
     $form[0].reset();
-    $("#passage_id").val("");
+    jQuery("#passage_id").val("");
 
     // Reset TinyMCE if available
     if (typeof tinyMCE !== "undefined" && tinyMCE.get("content")) {
@@ -188,13 +190,13 @@ LUS.Handlers.Passages = {
     }
 
     // Reset form state
-    $("#lus-form-title").text(LUS.Strings.addNewPassage);
-    $("#lus-cancel-edit").hide();
-    $("#submit").val(LUS.Strings.savePassage);
+    jQuery("#lus-form-title").text(LUS.Strings.addNewPassage);
+    jQuery("#lus-cancel-edit").hide();
+    jQuery("#submit").val(LUS.Strings.savePassage);
 
     // Clear any notices
-    $(".notice").fadeOut(400, function () {
-      $(this).remove();
+    jQuery(".notice").fadeOut(400, function () {
+      jQuery(this).remove();
     });
   },
 };

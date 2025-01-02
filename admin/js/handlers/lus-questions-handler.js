@@ -41,6 +41,8 @@ LUS.Handlers.Questions = {
     jQuery("#correct_answer").val(questionData.answer);
     jQuery("#weight").val(questionData.weight);
 
+    console.log(LUS.Strings.loading); // Outputs: "Laddar..."
+    console.log(LUS.Strings.passages.title); // Outputs: "Texter"
     // Update form state
     // The form's id is lus-question-form
     jQuery("#lus-form-title").text(LUS.Strings.editQuestion);
