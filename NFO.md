@@ -22,7 +22,7 @@ Looking at your admin.js code and the associated PHP files, there's definitely a
 ## Standardize HTML Structure and Naming
 
 Use consistent data attributes instead of specific IDs/classes
-Example: data-ra-action="delete" data-ra-type="passage|question|recording|assignment"
+Example: data-lus-action="delete" data-lus-type="passage|question|recording|assignment"
 Use consistent table/form structures across all admin views
 
 ## Unified Delete Handler
@@ -78,26 +78,26 @@ Files that need to be updated:
 
 Copyadmin/partials/
 
-- ra-admin-passages.php
-- ra-admin-questions.php
-- ra-admin-recordings.php
-- ra-admin-assignments.php
-- ra-admin-results.php
+- lus-admin-passages.php
+- lus-admin-questions.php
+- lus-admin-recordings.php
+- lus-admin-assignments.php
+- lus-admin-results.php
 
 ## JavaScript Files:
 
 Copyadmin/js/
 
-- ra-admin.js (main refactor target)
+- lus-admin.js (main refactor target)
 
 ## PHP Classes (For standardizing AJAX responses):
 
-Copyadmin/class-ra-admin.php (AJAX handlers)
-includes/class-ra-database.php (DB operations)
+Copyadmin/class-lus-admin.php (AJAX handlers)
+includes/class-lus-database.php (DB operations)
 
 ## CSS File (For standardized styling):
 
-Copyadmin/css/ra-admin.css
+Copyadmin/css/lus-admin.css
 
 #####################################
 
@@ -114,58 +114,58 @@ Modal interactions
 
 ## List Container Structure:
 
-<div class="ra-admin-section" data-ra-type="passages">
+<div class="lus-admin-section" data-lus-type="passages">
 
 <!-- Common header section -->
-<div class="ra-admin-header">
-<h1 class="ra-admin-title"><!-- title --></h1>
-<div class="ra-admin-actions">
+<div class="lus-admin-header">
+<h1 class="lus-admin-title"><!-- title --></h1>
+<div class="lus-admin-actions">
 <!-- Bulk actions, filters etc -->
-<select data-ra-bulk-action>
+<select data-lus-bulk-action>
 <option value="">Bulk Actions</option>
 <option value="delete">Delete</option>
 </select>
-<button class="button" data-ra-apply-bulk>Apply</button>
+<button class="button" data-lus-apply-bulk>Apply</button>
 </div>
 </div>
 
     <!-- Common table structure -->
-    <table class="wp-list-table widefat" data-ra-table>
+    <table class="wp-list-table widefat" data-lus-table>
         <thead>
             <tr>
                 <th class="check-column">
-                    <input type="checkbox" data-ra-select-all>
+                    <input type="checkbox" data-lus-select-all>
                 </th>
-                <!-- Other headers with data-ra-sort attribute -->
-                <th data-ra-sort="title">Title</th>
-                <th data-ra-sort="date">Date</th>
+                <!-- Other headers with data-lus-sort attribute -->
+                <th data-lus-sort="title">Title</th>
+                <th data-lus-sort="date">Date</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
-            <tr data-ra-item="item-id">
+            <tr data-lus-item="item-id">
                 <td>
-                    <input type="checkbox" data-ra-select="item-id">
+                    <input type="checkbox" data-lus-select="item-id">
                 </td>
-                <td data-ra-field="title"><!-- content --></td>
-                <td data-ra-field="date"><!-- content --></td>
-                <td class="ra-actions">
+                <td data-lus-field="title"><!-- content --></td>
+                <td data-lus-field="date"><!-- content --></td>
+                <td class="lus-actions">
                     <button class="button"
-                            data-ra-action="edit"
-                            data-ra-id="item-id"
-                            data-ra-type="passage">Edit</button>
+                            data-lus-action="edit"
+                            data-lus-id="item-id"
+                            data-lus-type="passage">Edit</button>
                     <button class="button"
-                            data-ra-action="delete"
-                            data-ra-id="item-id"
-                            data-ra-type="passage"
-                            data-ra-confirm="Are you sure?">Delete</button>
+                            data-lus-action="delete"
+                            data-lus-id="item-id"
+                            data-lus-type="passage"
+                            data-lus-confirm="Are you sure?">Delete</button>
                 </td>
             </tr>
         </tbody>
     </table>
 
     <!-- Standardized pagination -->
-    <div class="ra-pagination" data-ra-pagination>
+    <div class="lus-pagination" data-lus-pagination>
         <!-- pagination content -->
     </div>
 
@@ -173,50 +173,50 @@ Modal interactions
 
 ## Form Structure:
 
-<form class="ra-admin-form"
-      data-ra-form="passage"
-      data-ra-mode="add">
+<form class="lus-admin-form"
+      data-lus-form="passage"
+      data-lus-mode="add">
 
-    <input type="hidden" name="action" value="ra_admin_save_passage">
-    <input type="hidden" name="id" value="" data-ra-form-id>
+    <input type="hidden" name="action" value="lus_admin_save_passage">
+    <input type="hidden" name="id" value="" data-lus-form-id>
 
-    <div class="ra-form-row">
-        <label data-ra-label="title">Title</label>
+    <div class="lus-form-row">
+        <label data-lus-label="title">Title</label>
         <input type="text"
                name="title"
-               data-ra-input="title"
+               data-lus-input="title"
                required>
     </div>
 
-    <div class="ra-form-row">
-        <label data-ra-label="content">Content</label>
+    <div class="lus-form-row">
+        <label data-lus-label="content">Content</label>
         <textarea name="content"
-                  data-ra-input="content"
-                  data-ra-editor="tinymce"></textarea>
+                  data-lus-input="content"
+                  data-lus-editor="tinymce"></textarea>
     </div>
 
-    <div class="ra-form-actions">
+    <div class="lus-form-actions">
         <button type="submit"
                 class="button button-primary"
-                data-ra-submit>Save</button>
+                data-lus-submit>Save</button>
         <button type="button"
                 class="button"
-                data-ra-cancel>Cancel</button>
+                data-lus-cancel>Cancel</button>
     </div>
 
 </form>
 
 ## Status Messages Structure:
 
-<div class="ra-notices" data-ra-notices>
+<div class="lus-notices" data-lus-notices>
 
-<div class="ra-notice"
-         data-ra-notice="success"
+<div class="lus-notice"
+         data-lus-notice="success"
          style="display: none">
 <!-- Success message -->
 </div>
-<div class="ra-notice"
-         data-ra-notice="error"
+<div class="lus-notice"
+         data-lus-notice="error"
          style="display: none">
 <!-- Error message -->
 </div>
@@ -225,20 +225,20 @@ Modal interactions
 
 ## Modal Structure:
 
-<div class="ra-modal" data-ra-modal="assessment">
+<div class="lus-modal" data-lus-modal="assessment">
 
-<div class="ra-modal-content">
-<button class="ra-modal-close"
-                data-ra-modal-close>×</button>
-<h2 class="ra-modal-title"><!-- title --></h2>
-<div class="ra-modal-body">
+<div class="lus-modal-content">
+<button class="lus-modal-close"
+                data-lus-modal-close>×</button>
+<h2 class="lus-modal-title"><!-- title --></h2>
+<div class="lus-modal-body">
 <!-- modal content -->
 </div>
-<div class="ra-modal-footer">
+<div class="lus-modal-footer">
 <button class="button"
-                    data-ra-modal-cancel>Cancel</button>
+                    data-lus-modal-cancel>Cancel</button>
 <button class="button button-primary"
-                    data-ra-modal-confirm>Confirm</button>
+                    data-lus-modal-confirm>Confirm</button>
 </div>
 </div>
 
@@ -246,17 +246,17 @@ Modal interactions
 
 ## Key Points in this Standardization:
 
-All interactive elements use data-ra-\* attributes
-Consistent class naming with ra- prefix
+All interactive elements use data-lus-\* attributes
+Consistent class naming with lus- prefix
 Clear hierarchy in HTML structure
 Standardized data attributes for:
 
-Actions (data-ra-action)
-Types (data-ra-type)
-IDs (data-ra-id)
-Forms (data-ra-form)
-Inputs (data-ra-input)
-Modal controls (data-ra-modal-\*)
+Actions (data-lus-action)
+Types (data-lus-type)
+IDs (data-lus-id)
+Forms (data-lus-form)
+Inputs (data-lus-input)
+Modal controls (data-lus-modal-\*)
 
 This structure will be repeated across all admin views (passages, questions, recordings, assignments) with only the content and specific fields changing.
 Would you like to see how we'd adapt this to a specific view like passages or questions? Or should we move on to the JavaScript architecture that will handle this standardized structure?
@@ -328,7 +328,7 @@ listeners: {},
     },
 
     handleGlobalClick(e) {
-        const target = e.target.closest('[data-ra-action]');
+        const target = e.target.closest('[data-lus-action]');
         if (target) {
             const action = target.dataset.raAction;
             const type = target.dataset.raType;
@@ -352,8 +352,8 @@ headers: {
 'Content-Type': 'application/x-www-form-urlencoded',
 },
 body: new URLSearchParams({
-action: `ra_admin_${action}`,
-nonce: raStrings.nonce,
+action: `lus_admin_${action}`,
+nonce: LUSStrings.nonce,
 ...data
 })
 });
@@ -384,7 +384,7 @@ this.initBulkActions();
 },
 
         initSorting() {
-            document.querySelectorAll('[data-ra-sort]').forEach(header => {
+            document.querySelectorAll('[data-lus-sort]').forEach(header => {
                 header.addEventListener('click', () => {
                     // Implement sorting logic
                 });
@@ -423,7 +423,7 @@ this.initBulkActions();
 
     Modals: {
         show(modalId, data = {}) {
-            const modal = document.querySelector(`[data-ra-modal="${modalId}"]`);
+            const modal = document.querySelector(`[data-lus-modal="${modalId}"]`);
             if (modal) {
                 // Set up modal data and show
                 modal.classList.add('active');
@@ -433,9 +433,9 @@ this.initBulkActions();
 
     Notices: {
         show(type, message) {
-            const container = document.querySelector('[data-ra-notices]');
+            const container = document.querySelector('[data-lus-notices]');
             if (container) {
-                const notice = container.querySelector(`[data-ra-notice="${type}"]`);
+                const notice = container.querySelector(`[data-lus-notice="${type}"]`);
                 notice.textContent = message;
                 notice.style.display = 'block';
 
@@ -462,7 +462,7 @@ ReadingAssessment.Events.on('passage:saved', this.handleSaved.bind(this));
         if (confirm('Are you sure?')) {
             try {
                 await ReadingAssessment.Data.request('passage_delete', { id });
-                target.closest('[data-ra-item]').remove();
+                target.closest('[data-lus-item]').remove();
                 ReadingAssessment.Notices.show('success', 'Deleted successfully');
             } catch (error) {
                 // Error already handled by Data module
@@ -505,7 +505,7 @@ wp_send_json([
 }
 
     // Standard permission check
-    private function verify_request($nonce_action = 'ra_admin_action') {
+    private function verify_request($nonce_action = 'lus_admin_action') {
         if (!current_user_can('manage_options')) {
             $this->json_response(false, null, __('Permission denied', 'reading-assessment'));
         }
@@ -549,7 +549,7 @@ wp_send_json([
         foreach ($handlers as $type => $actions) {
             foreach ($actions as $action) {
                 add_action(
-                    "wp_ajax_ra_admin_{$type}_{$action}",
+                    "wp_ajax_lus_admin_{$type}_{$action}",
                     [$this, "handle_{$type}_{$action}"]
                 );
             }
@@ -561,7 +561,7 @@ wp_send_json([
 ## Standardized Content Type Handlers:
 
 php//
-trait RA_Content_Handler {
+trait LUS_Content_Handler {
 protected function get_list($type, $args = []) {
 $defaults = [
 'page' => 1,
@@ -600,8 +600,8 @@ $defaults = [
 
 }
 
-class RA_Passage_Handler {
-use RA_Content_Handler;
+class LUS_Passage_Handler {
+use LUS_Content_Handler;
 
     public function handle_passage_get() {
         $this->handle_crud_request('passage', 'get', function() {
@@ -725,7 +725,7 @@ $offset = ($args['page'] - 1) \* $args['per_page'];
     }
 
     private function get_table_name($type) {
-        return $this->db->prefix . 'ra_' . $type . 's';
+        return $this->db->prefix . 'lus_' . $type . 's';
     }
 
 }
@@ -733,7 +733,7 @@ $offset = ($args['page'] - 1) \* $args['per_page'];
 ## Response Format Standardization:
 
 php//
-trait RA_Response_Formatter {
+trait LUS_Response_Formatter {
 protected function format_list_response($items, $total, $page, $per_page) {
         return [
             'items' => array_map([$this, 'format_item'], $items),
@@ -787,13 +787,13 @@ plaintext:
 1. Create new file structure:
    /admin
    ├── js
-   │ ├── ra-core.js (new base architecture)
-   │ ├── ra-handlers.js (content type handlers)
-   │ └── ra-ui.js (UI components)
+   │ ├── lus-core.js (new base architecture)
+   │ ├── lus-handlers.js (content type handlers)
+   │ └── lus-ui.js (UI components)
    └── class
-   ├── ra-base-handler.php (new base handler)
-   ├── ra-content-handler.php (content trait)
-   └── ra-response-formatter.php (response trait)
+   ├── lus-base-handler.php (new base handler)
+   ├── lus-content-handler.php (content trait)
+   └── lus-response-formatter.php (response trait)
 
 2. Implement core architecture without touching existing code
 3. Set up testing infrastructure
@@ -828,7 +828,7 @@ plaintext:
 - Implement one content type at a time
 - Keep both old and new systems running in parallel
 - Add feature flag for easy rollback:
-  if (get_option('ra_use_new_admin', false)) {
+  if (get_option('lus_use_new_admin', false)) {
   // New system
   } else {
   // Old system
@@ -952,30 +952,30 @@ Indexes:
 You’ve added indexes on frequently joined fields like user_id, passage_id, and recording_id, which improves query performance.
 Extensibility:
 
-Adding columns and tables is handled with versioning (ra_db_version), making schema updates seamless.
+Adding columns and tables is handled with versioning (lus_db_version), making schema updates seamless.
 Separation of Concerns:
 
-Distinct tables for ra_passages, ra_recordings, ra_questions, ra_responses, and ra_assignments reflect logical separation of functionality.
+Distinct tables for lus_passages, lus_recordings, lus_questions, lus_responses, and lus_assignments reflect logical separation of functionality.
 Potential Bottlenecks & Suggestions
 
 1. Thousands of Users and Data Points
    Challenge: With thousands of users, assignments, recordings, and interactions, some tables could become performance bottlenecks.
    Suggestions:
-   Add compound indexes where appropriate. For example, in the ra_responses table, a compound index on (recording_id, question_id) might improve lookup speed for paired queries.
+   Add compound indexes where appropriate. For example, in the lus_responses table, a compound index on (recording_id, question_id) might improve lookup speed for paired queries.
    For large-scale systems, sharding data by user groups or partitions by date can help manage table size.
 2. Audio File Storage
-   Challenge: Storing file paths in the ra_recordings table might lead to inefficiencies if file metadata needs frequent updates or cross-references.
+   Challenge: Storing file paths in the lus_recordings table might lead to inefficiencies if file metadata needs frequent updates or cross-references.
    Suggestions:
-   Store files in a dedicated table, e.g., ra_files, with metadata such as file_size, file_type, and storage_url. Reference files by file_id in the ra_recordings table.
+   Store files in a dedicated table, e.g., lus_files, with metadata such as file_size, file_type, and storage_url. Reference files by file_id in the lus_recordings table.
 3. Interaction Data
-   Challenge: The ra_admin_interactions table might grow quickly due to time-series-style data (e.g., active_time, idle_time).
+   Challenge: The lus_admin_interactions table might grow quickly due to time-series-style data (e.g., active_time, idle_time).
    Suggestions:
    Store interaction data in a dedicated analytics or log table, optimized for writes.
    Aggregate data periodically to reduce row counts while keeping relevant summaries.
-4. Scalability of ra_questions and ra_responses
+4. Scalability of lus_questions and lus_responses
    Challenge: If passages have many questions, and each user generates responses, this could lead to exponential growth.
    Suggestions:
-   Ensure passage_id in ra_questions and recording_id in ra_responses have indexes for efficient filtering and grouping.
+   Ensure passage_id in lus_questions and recording_id in lus_responses have indexes for efficient filtering and grouping.
    Consider implementing pagination or archiving mechanisms for old responses.
 5. Query Optimization
    Challenge: Complex queries involving multiple joins (e.g., fetching user assignments, related recordings, and responses) might slow down.
@@ -988,7 +988,7 @@ Potential Bottlenecks & Suggestions
    Automate schema migrations with checks to ensure all required tables and columns are always present.
    Include robust rollback mechanisms for failed migrations.
 7. Data Archiving
-   Challenge: Over time, tables like ra_recordings, ra_responses, and ra_admin_interactions will grow considerably.
+   Challenge: Over time, tables like lus_recordings, lus_responses, and lus_admin_interactions will grow considerably.
    Suggestions:
    Implement periodic archiving of old data to separate tables or external storage for long-term historical data.
 8. Foreign Key Overhead
