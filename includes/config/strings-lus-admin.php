@@ -30,6 +30,8 @@ return [
         'addNew' => __('Lägg till ny text', 'lus'),
         'edit' => __('Ändra text', 'lus'),
         'confirmDelete' => __('Är du säker på att du vill radera denna text?', 'lus'),
+        'save' => __('Spara text', 'lus'),
+        'update' => __('Uppdatera text', 'lus'),
     ],
     'questions' => [
         'addNew' => __('Lägg till ny fråga', 'lus'),
