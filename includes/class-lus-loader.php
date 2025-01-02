@@ -82,6 +82,10 @@
      * Register the filters and actions with WordPress
      */
     public function run() {
+        static $initialized = false;
+        if ($initialized) return;
+        $initialized = true;
+
         foreach ($this->filters as $hook) {
             add_filter(
                 $hook['hook'],
