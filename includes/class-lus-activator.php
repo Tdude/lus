@@ -236,7 +236,6 @@ class LUS_Activator {
             ) {$charset_collate}",
 
             // Admin Activity Tracking
-            /*
             'lus_admin_interactions' => "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}lus_admin_interactions (
                 id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
                 user_id bigint(20) UNSIGNED NOT NULL,
@@ -254,8 +253,8 @@ class LUS_Activator {
                     FOREIGN KEY (user_id)
                     REFERENCES {$wpdb->users} (ID)
                     ON DELETE CASCADE
-            ) {$charset_collate}"
-            */
+            ) {$charset_collate}",
+
             'lus_admin_interactions' => "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}lus_admin_interactions (
                 id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
                 user_id bigint(20) UNSIGNED NOT NULL,

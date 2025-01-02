@@ -10,6 +10,7 @@
  */
 
 class LUS_Database {
+    private static $instance = null;
     /** @var wpdb WordPress database instance */
     private $db;
 
@@ -146,6 +147,10 @@ class LUS_Database {
      * Constructor
      */
     public function __construct() {
+        if (self::$instance !== null) {
+            return self::$instance;
+        }
+        self::$instance = $this;
         global $wpdb;
         $this->db = $wpdb;
     }
@@ -952,7 +957,7 @@ class LUS_Database {
         int $user_id,
         int $assigned_by,
         ?string $due_date = null
-    ) {
+        ) {
         try {
             if (empty($passage_id) || empty($user_id) || empty($assigned_by)) {
                 return new WP_Error('missing_data', __('Required fields missing', 'lus'));

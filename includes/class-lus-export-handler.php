@@ -4,9 +4,14 @@
  */
 
 class LUS_Export_Handler {
+    private static $instance = null;
     private $db;
 
     public function __construct($db) {
+        if (self::$instance !== null) {
+            return self::$instance;
+        }
+        self::$instance = $this;
         $this->db = $db;
     }
 

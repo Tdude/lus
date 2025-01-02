@@ -8,9 +8,14 @@
  */
 
 class LUS_Statistics {
+    private static $instance = null;
     private $db;
 
     public function __construct($db) {
+        if (self::$instance !== null) {
+            return self::$instance;
+        }
+        self::$instance = $this;
         $this->db = $db;
     }
 

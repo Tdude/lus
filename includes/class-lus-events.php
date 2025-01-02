@@ -8,6 +8,8 @@
  */
 
 class LUS_Events {
+    private static $instance = null;
+
     /**
      * Event listeners
      * @var array
@@ -19,6 +21,13 @@ class LUS_Events {
      * @var array
      */
     private static $oneTimeListeners = [];
+
+    public function __construct() {
+        if (self::$instance !== null) {
+            return self::$instance;
+        }
+        self::$instance = $this;
+    }
 
     /**
      * Add an event listener

@@ -7,10 +7,15 @@
  * @subpackage LUS/includes
  */
 class LUS_i18n {
+    private static $instance = null;
 
-    /**
-     * Load the plugin text domain for translation
-     */
+    public function __construct() {
+        if (self::$instance !== null) {
+            return self::$instance;
+        }
+        self::$instance = $this;
+    }
+
     public function load_plugin_textdomain() {
         load_plugin_textdomain(
             LUS_Constants::PLUGIN_NAME ,

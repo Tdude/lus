@@ -10,6 +10,8 @@
  */
 
 class LUS_Assessment_Handler {
+    private static $instance = null;
+
     /** @var LUS_Database */
     private $db;
 
@@ -34,6 +36,11 @@ class LUS_Assessment_Handler {
      * @param LUS_Database $db Database instance
      */
     public function __construct(LUS_Database $db) {
+        if (self::$instance !== null) {
+            return self::$instance;
+        }
+        self::$instance = $this;
+
         $this->db = $db;
 
         // Register default evaluators
